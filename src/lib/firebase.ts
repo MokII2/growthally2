@@ -9,7 +9,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyBZbRwNNSfqIE8HgkmwxzsZbdhmKjbY0ko",
   authDomain: "growth-ally-nsxp1.firebaseapp.com",
   projectId: "growth-ally-nsxp1",
-  storageBucket: "growth-ally-nsxp1.appspot.com", // Corrected storageBucket format
+  storageBucket: "growth-ally-nsxp1.firebasestorage.app", // Reverted to user's original value
   messagingSenderId: "1078263027083",
   appId: "1:1078263027083:web:a7fe44abf892ec51bb4b8e",
 };

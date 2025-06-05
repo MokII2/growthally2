@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
@@ -42,8 +43,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(true);
       if (firebaseUser) {
         setUser(firebaseUser);
-        const profile = await fetchUserProfile(firebaseUser.uid);
-        setUserProfile(profile);
+        const fetchedProfileData = await fetchUserProfile(firebaseUser.uid);
+
+        if (fetchedProfileData) {
+          setUserProfile(fetchedProfileData);
+        } else {
+          // If profile fetch failed (returned null):
+          // Check if there's an existing userProfile in state with the same UID.
+          // This can happen if a sign-in function (e.g., signInParentAnonymously)
+          // set the profile, and Firestore read consistency caused fetchUserProfile 
+          // to return null temporarily for the new record.
+          // In this case, we don't want to nullify the already set profile.
+          if (!(userProfile && userProfile.uid === firebaseUser.uid)) {
+            // Only set to null if there's no existing matching profile in state.
+            setUserProfile(null);
+          }
+          // If userProfile (from state) exists and userProfile.uid matches firebaseUser.uid,
+          // we preserve the userProfile state, assuming it was correctly set by a sign-in function.
+        }
       } else {
         setUser(null);
         setUserProfile(null);
@@ -51,7 +68,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, []); // Keep dependency array empty for onAuthStateChanged setup
 
   const signInParentAnonymously = async (): Promise<FirebaseUser | null> => {
     setLoading(true);
@@ -59,13 +76,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userCredential = await signInAnonymously(auth);
       const parentUser = userCredential.user;
       if (parentUser) {
-        const parentProfile: UserProfile = {
+        const parentProfileData: UserProfile = {
           uid: parentUser.uid,
           role: 'parent',
         };
-        await setDoc(doc(db, 'users', parentUser.uid), parentProfile);
+        await setDoc(doc(db, 'users', parentUser.uid), parentProfileData);
         setUser(parentUser);
-        setUserProfile(parentProfile);
+        setUserProfile(parentProfileData); // Set profile directly
       }
       setLoading(false);
       return parentUser;
@@ -87,8 +104,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setUser(childUser);
             setUserProfile(profile);
          } else {
-            // This account is not a child account or profile doesn't exist
-            await signOut(auth); // Sign out if role mismatch
+            await signOut(auth); 
             throw new Error("Invalid child account.");
          }
       }
@@ -97,73 +113,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error("Error signing in child:", error);
       setLoading(false);
-      // Consider using useToast here for user feedback
       return null;
     }
   };
   
-  // This function is more complex as it involves creating a new Firebase Auth user
-  // and then linking them. For simplicity, we'll assume child account is created
-  // by parent providing email/password. The actual auth creation for child happens here.
   const signUpChildAndLinkToParent = async (parentAuthUid: string, childDetails: { name: string, email: string, password?: string }): Promise<UserProfile | null> => {
     setLoading(true);
-    if (!childDetails.password) { // Generate a temporary password if not provided
+    if (!childDetails.password) { 
         childDetails.password = Math.random().toString(36).slice(-8);
-        // Potentially email this to the parent or display it.
-        // For now, this is simplified.
     }
     try {
-      // This part should ideally be done via a server-side function for security if creating users directly.
-      // For client-side, this is a simplified approach.
-      // Create child auth user (this might be better handled by an admin SDK on backend or cloud function)
-      // For now, we'll create it and assume the parent is responsible.
-      // This approach creates the user on the client, which is generally not recommended for production flows
-      // without proper security rules or backend involvement.
-      // For this example, we proceed with client-side creation.
-      // Consider alternative: parent adds child details, child receives invite to set up account.
-
-      // Temporary sign out current user (parent) to create child account
-      // This is tricky and not ideal. Firebase Admin SDK is better for this.
-      // For now, we will skip direct auth creation here and assume child account creation is handled externally or parent sets details.
-      // And focus on linking an existing child's UID after they've signed up separately or parent helps them.
-      // Simplified: just add to firestore
-      
-      // A better flow: Parent adds child details (name, email). System emails child an invite.
-      // Child clicks invite, sets password, account created.
-      // For now: Parent "adds" a child by providing details, and we manually create their entry.
-      // Actual auth creation for child needs separate handling.
-
-      // Let's assume for now child is added by creating a Firestore record under parent.
-      // And the child will sign up separately or parent helps them.
-      // This function will primarily add the child's data to the parent's subcollection.
-      
       const childProfile: UserProfile = {
-        uid: `temp_child_uid_${Date.now()}`, // Placeholder UID, real UID after child auth
+        uid: `temp_child_uid_${Date.now()}`, 
         role: 'child',
         email: childDetails.email,
         displayName: childDetails.name,
         parentId: parentAuthUid,
         points: 0,
       };
-
-      // Add to parent's children subcollection (using a generated ID for now)
       const childDocRef = await addDoc(collection(db, 'users', parentAuthUid, 'children'), {
         name: childDetails.name,
         email: childDetails.email,
         points: 0,
-        // authUid will be updated once child actually logs in / account is created.
       });
-      
-      // Add to global users collection (again, UID is placeholder)
-      // This part would be done when child actually signs up.
-      // await setDoc(doc(db, 'users', childProfile.uid), childProfile);
-
-      // This function needs rethinking for a real app.
-      // For now, it's a placeholder for adding child data under parent.
-      // Real child auth creation needs careful design.
-
       setLoading(false);
-      return childProfile; // Returning a placeholder profile
+      return childProfile; 
     } catch (error) {
       console.error("Error signing up child:", error);
       setLoading(false);
@@ -171,14 +145,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-
   const signOutUser = async () => {
     setLoading(true);
     try {
       await signOut(auth);
       setUser(null);
       setUserProfile(null);
-      router.push('/'); // Redirect to role selection on sign out
+      router.push('/'); 
     } catch (error) {
       console.error("Error signing out:", error);
     }

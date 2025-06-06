@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, type FormEvent } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,8 +12,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-
-// TODO: Fetch children for assignment dropdown
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import type { Task } from '@/types';
 
 interface AddTaskModalProps {
   isOpen: boolean;
@@ -24,13 +25,13 @@ interface AddTaskModalProps {
 const taskFormSchema = z.object({
   description: z.string().min(3, { message: "Description must be at least 3 characters." }).max(100, { message: "Description too long." }),
   points: z.coerce.number().min(1, { message: "Points must be at least 1." }).max(1000, { message: "Points seem too high." }),
-  // assignedTo: z.string().optional(), // Child's UID
+  // assignedTo: z.string().optional(), // Child's UID - For future implementation
 });
 
 type TaskFormValues = z.infer<typeof taskFormSchema>;
 
 export default function AddTaskModal({ isOpen, onClose, onTaskAdded }: AddTaskModalProps) {
-  const { user } = useAuth(); // To get parentId
+  const { user } = useAuth();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -48,23 +49,30 @@ export default function AddTaskModal({ isOpen, onClose, onTaskAdded }: AddTaskMo
       return;
     }
     setIsSubmitting(true);
-    console.log("Task data to submit:", { ...data, parentId: user.uid }); // Placeholder
-    
-    // Placeholder for actual Firestore submission logic
-    // const success = await addTaskToFirestore({ ...data, parentId: user.uid, status: 'pending', createdAt: serverTimestamp() });
-    const success = true; // Simulate success for now
-
-    if (success) {
-      toast({ title: "Task Added (Placeholder)", description: `Task "${data.description}" has been created.` });
+    try {
+      const taskData: Omit<Task, 'id' | 'createdAt'> & { createdAt: any } = {
+        description: data.description,
+        points: data.points,
+        parentId: user.uid,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        // assignedTo: data.assignedTo || null, // For future implementation
+        // assignedToName: data.assignedTo ? findChildName(data.assignedTo) : null // For future implementation
+      };
+      await addDoc(collection(db, 'tasks'), taskData);
+      
+      toast({ title: "Task Added", description: `Task "${data.description}" has been created successfully.` });
       reset();
       onClose();
       if (onTaskAdded) {
-        onTaskAdded();
+        onTaskAdded(); // Callback to potentially refresh list, though onSnapshot handles it
       }
-    } else {
-      toast({ title: "Failed to Add Task", description: "An error occurred.", variant: "destructive" });
+    } catch (error: any) {
+      console.error("Error adding task:", error);
+      toast({ title: "Failed to Add Task", description: error.message || "An unexpected error occurred.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
   
   const handleCloseDialog = () => {

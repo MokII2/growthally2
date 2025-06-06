@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, type FormEvent } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import type { Reward } from '@/types';
 
 interface AddRewardModalProps {
   isOpen: boolean;
@@ -27,7 +30,7 @@ const rewardFormSchema = z.object({
 type RewardFormValues = z.infer<typeof rewardFormSchema>;
 
 export default function AddRewardModal({ isOpen, onClose, onRewardAdded }: AddRewardModalProps) {
-  const { user } = useAuth(); // To get parentId
+  const { user } = useAuth();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -45,23 +48,27 @@ export default function AddRewardModal({ isOpen, onClose, onRewardAdded }: AddRe
       return;
     }
     setIsSubmitting(true);
-    console.log("Reward data to submit:", { ...data, parentId: user.uid }); // Placeholder
+    try {
+      const rewardData: Omit<Reward, 'id' | 'createdAt'> & { createdAt: any } = {
+        description: data.description,
+        pointsCost: data.pointsCost,
+        parentId: user.uid,
+        createdAt: serverTimestamp(),
+      };
+      await addDoc(collection(db, 'rewards'), rewardData);
 
-    // Placeholder for actual Firestore submission logic
-    // const success = await addRewardToFirestore({ ...data, parentId: user.uid, createdAt: serverTimestamp() });
-    const success = true; // Simulate success for now
-
-    if (success) {
-      toast({ title: "Reward Added (Placeholder)", description: `Reward "${data.description}" has been created.` });
+      toast({ title: "Reward Added", description: `Reward "${data.description}" has been created successfully.` });
       reset();
       onClose();
       if (onRewardAdded) {
         onRewardAdded();
       }
-    } else {
-      toast({ title: "Failed to Add Reward", description: "An error occurred.", variant: "destructive" });
+    } catch (error: any) {
+      console.error("Error adding reward:", error);
+      toast({ title: "Failed to Add Reward", description: error.message || "An unexpected error occurred.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   const handleCloseDialog = () => {

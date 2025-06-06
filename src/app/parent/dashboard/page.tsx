@@ -2,18 +2,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Users, ListChecks, Award, Edit3, Trash2 } from "lucide-react";
+import { PlusCircle, Users, ListChecks, Award } from "lucide-react"; // Removed Edit3, Trash2 for now
 import AddChildModal from "@/components/modals/AddChildModal";
 import AddTaskModal from "@/components/modals/AddTaskModal";
 import AddRewardModal from "@/components/modals/AddRewardModal";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, onSnapshot, doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Child, Task, Reward } from "@/types"; // Assuming these types exist
+import type { Child, Task, Reward } from "@/types";
 import { useToast } from "@/hooks/use-toast";
-
 
 export default function ParentDashboardPage() {
   const { user } = useAuth();
@@ -27,12 +26,7 @@ export default function ParentDashboardPage() {
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
   const [isAddRewardModalOpen, setIsAddRewardModalOpen] = useState(false);
 
-  // TODO: State for edit modals
-  // const [editingChild, setEditingChild] = useState<Child | null>(null);
-  // const [editingTask, setEditingTask] = useState<Task | null>(null);
-  // const [editingReward, setEditingReward] = useState<Reward | null>(null);
-
-  // Fetch children (from parent's subcollection)
+  // Fetch children
   useEffect(() => {
     if (!user) return;
     const childrenQuery = query(collection(db, "users", user.uid, "children"));
@@ -46,38 +40,52 @@ export default function ParentDashboardPage() {
     return () => unsubscribe();
   }, [user, toast]);
 
-  // TODO: Implement actual Firestore fetching for tasks and rewards
-  // For now, using mock data structure, but it will be empty until Firestore logic is added
-  // useEffect(() => {
-  // if (!user) return;
-  // Mock data for tasks as Firestore integration is pending
-  // const mockTasks: Task[] = [
-  // { id: 't1', description: 'Clean Room', points: 10, parentId: user.uid, status: 'pending', createdAt: new Date(), assignedToName: 'Alex' },
-  // { id: 't2', description: 'Homework', points: 15, parentId: user.uid, status: 'verified', createdAt: new Date() },
-  // ];
-  // setTasks(mockTasks);
+  // Fetch tasks
+  useEffect(() => {
+    if (!user) return;
+    const tasksQuery = query(
+      collection(db, "tasks"),
+      where("parentId", "==", user.uid),
+      orderBy("createdAt", "desc")
+    );
+    const unsubscribe = onSnapshot(tasksQuery, (snapshot) => {
+      const fetchedTasks: Task[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
+      setTasks(fetchedTasks);
+    }, (error) => {
+      console.error("Error fetching tasks:", error);
+      toast({ title: "Error", description: "Could not fetch tasks.", variant: "destructive" });
+    });
+    return () => unsubscribe();
+  }, [user, toast]);
 
-  // Mock data for rewards
-  // const mockRewards: Reward[] = [
-  //   { id: 'r1', description: 'Extra Screen Time', pointsCost: 50, parentId: user.uid, createdAt: new Date() },
-  //   { id: 'r2', description: 'Ice Cream Trip', pointsCost: 100, parentId: user.uid, createdAt: new Date() },
-  // ];
-  // setRewards(mockRewards);
-  // }, [user]);
+  // Fetch rewards
+  useEffect(() => {
+    if (!user) return;
+    const rewardsQuery = query(
+      collection(db, "rewards"),
+      where("parentId", "==", user.uid),
+      orderBy("createdAt", "desc")
+    );
+    const unsubscribe = onSnapshot(rewardsQuery, (snapshot) => {
+      const fetchedRewards: Reward[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Reward));
+      setRewards(fetchedRewards);
+    }, (error) => {
+      console.error("Error fetching rewards:", error);
+      toast({ title: "Error", description: "Could not fetch rewards.", variant: "destructive" });
+    });
+    return () => unsubscribe();
+  }, [user, toast]);
 
-
-  const handleRefreshData = () => {
-    // This function could be called by modals to indicate data has changed.
-    // With onSnapshot, data should refresh automatically.
-    // If not using onSnapshot for some data, manual re-fetch logic would go here.
-    console.log("Data refresh triggered (relevant if not using onSnapshot everywhere).");
+  const handleDataRefreshNeeded = () => {
+    // onSnapshot handles real-time updates, so this is less critical
+    // but can be used for other one-off refresh needs if any.
+    console.log("Data refresh explicitly triggered (though onSnapshot should cover most cases).");
   };
   
-  // Placeholder delete functions - replace with Firestore logic
-  const handleDeleteChild = (childId: string) => alert(`Delete child ${childId} - Placeholder`);
-  const handleDeleteTask = (taskId: string) => alert(`Delete task ${taskId} - Placeholder`);
-  const handleDeleteReward = (rewardId: string) => alert(`Delete reward ${rewardId} - Placeholder`);
-
+  // Placeholder delete functions - will be implemented later
+  // const handleDeleteChild = (childId: string) => alert(`Delete child ${childId} - Placeholder`);
+  // const handleDeleteTask = (taskId: string) => alert(`Delete task ${taskId} - Placeholder`);
+  // const handleDeleteReward = (rewardId: string) => alert(`Delete reward ${rewardId} - Placeholder`);
 
   return (
     <div className="space-y-8">
@@ -108,7 +116,7 @@ export default function ParentDashboardPage() {
                       <span className="font-medium">{child.name}</span>
                       <p className="text-xs text-muted-foreground">{child.email}</p>
                     </div>
-                    {/* 
+                    {/* Edit/Delete buttons placeholder - for future implementation
                     <div className="flex items-center space-x-1">
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => alert(`Edit ${child.name}`)}>
                         <Edit3 className="h-4 w-4" />
@@ -148,7 +156,7 @@ export default function ParentDashboardPage() {
                     </div>
                     {task.assignedToName && <p className="text-xs text-muted-foreground">Assigned to: {task.assignedToName}</p>}
                     <p className="text-xs text-muted-foreground capitalize">Status: {task.status}</p>
-                     {/*
+                     {/* Edit/Delete buttons placeholder
                     <div className="flex items-center space-x-1 mt-1">
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => alert(`Edit ${task.description}`)}>
                         <Edit3 className="h-4 w-4" />
@@ -186,7 +194,7 @@ export default function ParentDashboardPage() {
                       <span className="font-medium">{reward.description}</span>
                     </div>
                     <span className="text-sm text-primary">{reward.pointsCost} Points</span>
-                    {/*
+                    {/* Edit/Delete buttons placeholder
                     <div className="flex items-center space-x-1">
                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => alert(`Edit ${reward.description}`)}>
                         <Edit3 className="h-4 w-4" />
@@ -210,17 +218,17 @@ export default function ParentDashboardPage() {
       <AddChildModal 
         isOpen={isAddChildModalOpen} 
         onClose={() => setIsAddChildModalOpen(false)}
-        onChildAdded={handleRefreshData} 
+        onChildAdded={handleDataRefreshNeeded} 
       />
       <AddTaskModal 
         isOpen={isAddTaskModalOpen} 
         onClose={() => setIsAddTaskModalOpen(false)} 
-        onTaskAdded={handleRefreshData}
+        onTaskAdded={handleDataRefreshNeeded}
       />
       <AddRewardModal 
         isOpen={isAddRewardModalOpen} 
         onClose={() => setIsAddRewardModalOpen(false)} 
-        onRewardAdded={handleRefreshData}
+        onRewardAdded={handleDataRefreshNeeded}
       />
     </div>
   );

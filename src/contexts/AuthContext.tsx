@@ -33,7 +33,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       return null;
     } catch (error) {
-      console.error("Error fetching user profile:", error);
+      console.error("获取用户资料时出错：", error);
       return null;
     }
   };
@@ -87,7 +87,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
       return parentUser;
     } catch (error) {
-      console.error("Error signing in parent anonymously:", error);
+      console.error("匿名登录家长时出错：", error);
       setLoading(false);
       return null;
     }
@@ -105,13 +105,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setUserProfile(profile);
          } else {
             await signOut(auth); 
-            throw new Error("Invalid child account.");
+            throw new Error("无效的孩子账户。");
          }
       }
       setLoading(false);
       return childUser;
     } catch (error) {
-      console.error("Error signing in child:", error);
+      console.error("登录孩子时出错：", error);
       setLoading(false);
       return null;
     }
@@ -139,7 +139,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
       return childProfile; 
     } catch (error) {
-      console.error("Error signing up child:", error);
+      console.error("注册孩子时出错：", error);
       setLoading(false);
       return null;
     }
@@ -153,7 +153,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUserProfile(null);
       router.push('/'); 
     } catch (error) {
-      console.error("Error signing out:", error);
+      console.error("登出时出错：", error);
     }
     setLoading(false);
   };

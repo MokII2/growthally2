@@ -25,11 +25,11 @@ export default function ChildLoginPage() {
     setError('');
     const childUser = await signInChildWithEmail(email, password);
     if (childUser) {
-      toast({ title: "Login Successful!", description: "Welcome back!"});
+      toast({ title: "登录成功！", description: "欢迎回来！"});
       router.push('/child/dashboard');
     } else {
-      setError('Invalid email or password. Please try again.');
-      toast({ title: "Login Failed", description: "Invalid email or password.", variant: "destructive" });
+      setError('邮箱或密码无效。请重试。');
+      toast({ title: "登录失败", description: "邮箱或密码无效。", variant: "destructive" });
     }
   };
 
@@ -37,15 +37,15 @@ export default function ChildLoginPage() {
     <div className="flex min-h-screen items-center justify-center p-6 bg-gradient-to-br from-background to-accent/30">
       <Card className="w-full max-w-md shadow-2xl">
         <CardHeader>
-          <CardTitle className="text-2xl font-headline text-primary text-center">Child Login</CardTitle>
+          <CardTitle className="text-2xl font-headline text-primary text-center">孩子登录</CardTitle>
           <CardDescription className="text-center text-muted-foreground">
-            Enter your details to access your dashboard.
+            输入您的详细信息以访问您的仪表盘。
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">邮箱</Label>
               <Input
                 id="email"
                 type="email"
@@ -57,7 +57,7 @@ export default function ChildLoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">密码</Label>
               <Input
                 id="password"
                 type="password"
@@ -71,7 +71,7 @@ export default function ChildLoginPage() {
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
               <LogIn className="mr-2 h-5 w-5" />
-              {loading ? 'Logging in...' : 'Log In'}
+              {loading ? '登录中...' : '登录'}
             </Button>
           </form>
         </CardContent>
@@ -79,7 +79,7 @@ export default function ChildLoginPage() {
           <Button variant="link" asChild className="text-sm text-muted-foreground">
             <Link href="/">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Role Selection
+              返回角色选择
             </Link>
           </Button>
         </CardFooter>

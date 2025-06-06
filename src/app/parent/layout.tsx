@@ -21,12 +21,12 @@ export default function ParentLayout({ children }: { children: ReactNode }) {
 
   if (loading || !user || !isParent) {
     // Show a loading state or a minimal layout while checking auth
-    return <div className="flex h-screen items-center justify-center"><p>正在加载家长仪表盘...</p></div>;
+    return <div className="flex h-screen items-center justify-center"><p>Loading parent dashboard...</p></div>;
   }
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Header title="家长仪表盘" />
+      <Header title="Parent Dashboard" />
       <main className="flex-1 container py-8">
         {children}
       </main>

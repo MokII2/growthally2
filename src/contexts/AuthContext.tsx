@@ -33,7 +33,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       return null;
     } catch (error) {
-      console.error("获取用户资料时出错：", error);
+      console.error("Error fetching user profile:", error);
       return null;
     }
   };
@@ -87,7 +87,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
       return parentUser;
     } catch (error) {
-      console.error("匿名登录家长时出错：", error);
+      console.error("Error signing in parent anonymously:", error);
       setLoading(false);
       return null;
     }
@@ -105,13 +105,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setUserProfile(profile);
          } else {
             await signOut(auth); 
-            throw new Error("无效的孩子账户。");
+            throw new Error("Invalid child account.");
          }
       }
       setLoading(false);
       return childUser;
     } catch (error) {
-      console.error("登录孩子时出错：", error);
+      console.error("Error signing in child:", error);
       setLoading(false);
       return null;
     }
@@ -123,23 +123,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         childDetails.password = Math.random().toString(36).slice(-8);
     }
     try {
+      // This function currently only adds a document to a subcollection in Firestore
+      // and does not create an actual Firebase Auth user for the child.
+      // This might need to be revisited if children need to log in independently with email/password.
+      // For now, it simulates a child profile linked to a parent.
       const childProfile: UserProfile = {
-        uid: `temp_child_uid_${Date.now()}`, 
+        uid: `temp_child_uid_${Date.now()}`, // Placeholder UID, not a real Auth UID
         role: 'child',
         email: childDetails.email,
         displayName: childDetails.name,
         parentId: parentAuthUid,
         points: 0,
       };
+      // Storing child's details under parent's document in a 'children' subcollection.
       const childDocRef = await addDoc(collection(db, 'users', parentAuthUid, 'children'), {
         name: childDetails.name,
         email: childDetails.email,
         points: 0,
+        // password: childDetails.password // Storing password like this is not recommended.
+                                         // Actual auth creation for child needed for real login.
       });
+      // The returned 'childProfile' is a local representation, not a full auth user.
       setLoading(false);
       return childProfile; 
     } catch (error) {
-      console.error("注册孩子时出错：", error);
+      console.error("Error signing up child:", error);
       setLoading(false);
       return null;
     }
@@ -153,7 +161,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUserProfile(null);
       router.push('/'); 
     } catch (error) {
-      console.error("登出时出错：", error);
+      console.error("Error signing out:", error);
     }
     setLoading(false);
   };

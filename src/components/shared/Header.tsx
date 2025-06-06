@@ -9,7 +9,7 @@ interface HeaderProps {
   title?: string;
 }
 
-export default function Header({ title = "成长伙伴" }: HeaderProps) {
+export default function Header({ title = "Growth Ally" }: HeaderProps) {
   const { user, userProfile, signOutUser, loading } = useAuth();
 
   return (
@@ -33,7 +33,7 @@ export default function Header({ title = "成长伙伴" }: HeaderProps) {
                 )}
                 <Button variant="ghost" size="sm" onClick={signOutUser} disabled={loading}>
                   <LogOut className="mr-1 h-4 w-4" />
-                  登出
+                  Sign Out
                 </Button>
               </>
             )}

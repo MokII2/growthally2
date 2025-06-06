@@ -27,7 +27,7 @@ export default function RoleSelectionPage() {
       router.push('/parent/dashboard');
     } else {
       // Handle error, maybe show a toast
-      console.error("家长登录失败");
+      console.error("Parent sign-in failed");
     }
   };
 
@@ -36,7 +36,7 @@ export default function RoleSelectionPage() {
   };
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center"><p>加载中...</p></div>;
+    return <div className="flex min-h-screen items-center justify-center"><p>Loading...</p></div>;
   }
   // If user is already logged in and identified, they'd be redirected by useEffect.
   // This view is for users not yet logged in or identified.
@@ -49,13 +49,13 @@ export default function RoleSelectionPage() {
              {/* Growth Ally Icon Placeholder - A plant sprout or similar */}
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 20h10"/><path d="M10 20c0-2.21-1.79-4-4-4V4c0-1.11.89-2 2-2h4c1.11 0 2 .89 2 2v12c0 2.21-1.79 4-4 4"/><path d="M12 12c-2-2.67-4-4-4-4"/><path d="m16 12 2-2"/></svg>
           </div>
-          <CardTitle className="text-3xl font-headline text-primary">成长伙伴</CardTitle>
+          <CardTitle className="text-3xl font-headline text-primary">Growth Ally</CardTitle>
           <CardDescription className="text-muted-foreground">
-            共同培养责任感和乐趣。
+            Cultivating responsibility and fun, together.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <p className="text-center text-foreground/80">请选择您的角色以继续：</p>
+          <p className="text-center text-foreground/80">Please select your role to continue:</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Button
               variant="default"
@@ -64,7 +64,7 @@ export default function RoleSelectionPage() {
               onClick={handleParentLogin}
             >
               <Users className="mr-2 h-6 w-6" />
-              我是家长
+              I'm a Parent
             </Button>
             <Button
               variant="secondary"
@@ -73,13 +73,13 @@ export default function RoleSelectionPage() {
               onClick={handleChildLoginRedirect}
             >
               <Smile className="mr-2 h-6 w-6" />
-              我是孩子
+              I'm a Child
             </Button>
           </div>
         </CardContent>
       </Card>
       <footer className="mt-8 text-center text-sm text-muted-foreground">
-        &copy; {new Date().getFullYear()} 成长伙伴. 版权所有.
+        &copy; {new Date().getFullYear()} Growth Ally. All rights reserved.
       </footer>
     </div>
   );

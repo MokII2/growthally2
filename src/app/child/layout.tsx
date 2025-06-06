@@ -20,12 +20,12 @@ export default function ChildLayout({ children }: { children: ReactNode }) {
   }, [user, loading, isChild, router]);
 
   if (loading || !user || !isChild) {
-    return <div className="flex h-screen items-center justify-center"><p>正在加载孩子仪表盘...</p></div>;
+    return <div className="flex h-screen items-center justify-center"><p>Loading child dashboard...</p></div>;
   }
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Header title={userProfile?.displayName ? `${userProfile.displayName}的仪表盘` : "孩子仪表盘"} />
+      <Header title={userProfile?.displayName ? `${userProfile.displayName}'s Dashboard` : "Child Dashboard"} />
       <main className="flex-1 container py-8">
         {children}
       </main>

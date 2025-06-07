@@ -11,7 +11,7 @@ import AddRewardModal from "@/components/modals/AddRewardModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Child, Task, Reward } from "@/types";
+import type { Child, Task, Reward, UserProfile } from "@/types"; // Added UserProfile to useAuth
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -23,11 +23,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+} from "@/components/ui/alert-dialog"; // Removed AlertDialogTrigger as it's implicitly handled by open prop
 
 export default function ParentDashboardPage() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth(); // Destructure userProfile from useAuth
   const { toast } = useToast();
 
   const [children, setChildren] = useState<Child[]>([]);
@@ -38,7 +37,6 @@ export default function ParentDashboardPage() {
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
   const [isAddRewardModalOpen, setIsAddRewardModalOpen] = useState(false);
 
-  // State for managing deletion confirmation
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; type: 'child' | 'task' | 'reward'; childAuthUid?: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -79,7 +77,6 @@ export default function ParentDashboardPage() {
   }, [user, toast]);
 
   const handleDataRefreshNeeded = () => {
-    // This function might not be strictly necessary with onSnapshot, but can be kept for explicit triggers if any.
     console.log("Data refresh implicitly handled by onSnapshot listeners.");
   };
 
@@ -102,18 +99,20 @@ export default function ParentDashboardPage() {
 
     try {
       if (itemToDelete.type === 'child') {
-        // Delete child record from parent's subcollection
         await deleteDoc(doc(db, "users", user.uid, "children", itemToDelete.id));
         toast({ title: "Child Record Deleted", description: `${itemToDelete.name}'s record has been removed.` });
 
-        // If child has a main auth UID, delete their main profile document
         if (itemToDelete.childAuthUid) {
           const childProfileRef = doc(db, "users", itemToDelete.childAuthUid);
-          const childProfileSnap = await getDoc(childProfileRef);
-          if (childProfileSnap.exists()) {
-            await deleteDoc(childProfileRef);
-            toast({ title: "Child Profile Deleted", description: `Main profile for ${itemToDelete.name} also removed.` });
-          }
+          // Optional: Check if it exists before attempting delete, though delete is idempotent.
+          // const childProfileSnap = await getDoc(childProfileRef); 
+          // if (childProfileSnap.exists()) {
+             await deleteDoc(childProfileRef);
+             toast({ title: "Child Profile Deleted", description: `Main profile for ${itemToDelete.name} also removed.` });
+          // } else {
+          //   toast({ title: "Info", description: `Main profile for ${itemToDelete.name} not found or already deleted.`});
+          // }
+          
            toast({
             title: "Manual Action May Be Required",
             description: `If ${itemToDelete.name} had direct login, their Firebase Auth account needs to be deleted manually from the Firebase console.`,
@@ -128,10 +127,19 @@ export default function ParentDashboardPage() {
         await deleteDoc(doc(db, "rewards", itemToDelete.id));
         toast({ title: "Reward Deleted", description: `Reward "${itemToDelete.name}" has been removed.` });
       }
-      setItemToDelete(null); // Close dialog
+      setItemToDelete(null); 
     } catch (error: any) {
-      console.error(`Error deleting ${itemToDelete.type}:`, error);
-      toast({ title: `Error Deleting ${itemToDelete.type}`, description: error.message || "Could not complete deletion.", variant: "destructive" });
+      console.error(`Error deleting ${itemToDelete.type} (ID: ${itemToDelete.id}, ChildAuthUID: ${itemToDelete.childAuthUid || 'N/A'}):`, error);
+      // Log details that might be relevant for diagnosing permission issues
+      console.error("Details of item being deleted:", JSON.stringify(itemToDelete, null, 2));
+      console.error("Current parent Firebase Auth user UID:", user.uid);
+      console.error("Current parent user profile (from AuthContext):", JSON.stringify(userProfile, null, 2));
+      
+      toast({ 
+        title: `Error Deleting ${itemToDelete.type}`, 
+        description: error.message || "Could not complete deletion. Check console for details.", 
+        variant: "destructive" 
+      });
     } finally {
       setIsDeleting(false);
     }
@@ -165,7 +173,6 @@ export default function ParentDashboardPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Children Card */}
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xl font-medium">
@@ -229,7 +236,6 @@ export default function ParentDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Tasks Card */}
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xl font-medium">
@@ -272,7 +278,6 @@ export default function ParentDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Rewards Card */}
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xl font-medium">
@@ -330,3 +335,6 @@ export default function ParentDashboardPage() {
     </div>
   );
 }
+
+
+    

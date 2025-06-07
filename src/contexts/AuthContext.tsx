@@ -72,7 +72,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []); // Removed userProfile from dependency array to avoid potential loops
+  }, []);
 
  const signUpParent = async (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId'> & {password: string}): Promise<FirebaseUser | null> => {
     setLoading(true);
@@ -168,24 +168,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         parentId: parentAuthUid,
         points: 0,
       };
+      // Create the child's main profile in /users collection
       await setDoc(doc(db, 'users', newChildUser.uid), childProfileForUsersCollection);
 
+      // Add/Update the child's record in the parent's subcollection
+      // For simplicity, we assume one record per email in the subcollection for now,
+      // or create a new one. A more robust approach might query for existing child by email first.
       const childSubcollectionRef = collection(db, 'users', parentAuthUid, 'children');
-      // Here, we are adding a new document to the subcollection.
-      // If you need to update an existing one, you'd need its ID.
-      // For now, each call to this function adds a new child record to the subcollection.
-      await addDoc(childSubcollectionRef, {
+      await addDoc(childSubcollectionRef, { // Using addDoc to create a new document with auto-ID
         name: childDetails.name,
-        email: childDetails.email,
+        email: childDetails.email, // Store email for reference
         points: 0,
-        authUid: newChildUser.uid, 
+        authUid: newChildUser.uid, // Link to the child's actual Auth UID
         createdAt: serverTimestamp(),
-        initialPassword: generatedPassword, // Store the generated password
+        initialPassword: generatedPassword, // Store the generated password for display on parent dashboard
       });
       
       console.log(`Child Auth user and profile created for ${childDetails.name}. UID: ${newChildUser.uid}. Initial Password: ${generatedPassword}`);
       
-      await cleanup(); 
+      await cleanup(); // Clean up the temporary auth instance
       setLoading(false);
       return { userProfile: childProfileForUsersCollection, generatedPassword };
 
@@ -195,7 +196,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         await tempAuthManager.cleanup(); 
       }
       setLoading(false);
-      return null;
+      // Re-throw the error so the calling component can inspect its code
+      throw error; 
     }
   };
 

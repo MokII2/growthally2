@@ -11,7 +11,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-// Removed Alert components and Terminal icon as password will be on dashboard
 
 interface AddChildModalProps {
   isOpen: boolean;
@@ -30,7 +29,6 @@ export default function AddChildModal({ isOpen, onClose, onChildAdded }: AddChil
   const { signUpChildAndLinkToParent, user } = useAuth();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Removed generatedPasswordInfo state, as it's no longer displayed in modal
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm<ChildFormValues>({
     resolver: zodResolver(childFormSchema),
@@ -61,10 +59,25 @@ export default function AddChildModal({ isOpen, onClose, onChildAdded }: AddChil
             onChildAdded(); 
         }
       } else {
-        throw new Error("Failed to add child. The email might already be in use or another error occurred.");
+        // This 'else' might not be strictly necessary anymore if signUpChildAndLinkToParent always throws on failure.
+        // Kept for robustness in case of unexpected non-throwing failures.
+        throw new Error("Failed to add child or result was unexpected.");
       }
     } catch (error: any) {
-      toast({ title: "Failed to Add Child", description: error.message || "An unexpected error occurred.", variant: "destructive" });
+      if (error.code === 'auth/email-already-in-use') {
+        toast({ 
+          title: "Failed to Add Child", 
+          description: "This email address is already in use. Please use a different email for the child.", 
+          variant: "destructive" 
+        });
+      } else {
+        toast({ 
+          title: "Failed to Add Child", 
+          description: error.message || "An unexpected error occurred. Please try again.", 
+          variant: "destructive" 
+        });
+      }
+      console.error("Error in AddChildModal processSubmit:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -73,7 +86,6 @@ export default function AddChildModal({ isOpen, onClose, onChildAdded }: AddChil
   const handleCloseDialog = () => {
     if (!isSubmitting) {
       reset();
-      // setGeneratedPasswordInfo(null); // No longer needed
       onClose();
     }
   };
@@ -89,7 +101,6 @@ export default function AddChildModal({ isOpen, onClose, onChildAdded }: AddChil
             Enter the child's name and email. An account with an initial password will be created. You can view this password on your dashboard.
           </DialogDescription>
         </DialogHeader>
-        {/* Form is now always visible, no conditional rendering for password info */}
         <form onSubmit={handleSubmit(processSubmit)} className="grid gap-6 py-4">
           <div className="space-y-2">
             <Label htmlFor="name-add-child">Child's Name</Label>

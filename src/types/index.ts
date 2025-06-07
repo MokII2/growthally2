@@ -15,7 +15,7 @@ export interface UserProfile {
 }
 
 export interface Child { 
-  id: string; 
+  id: string; // Document ID from the subcollection
   name: string;
   email: string; 
   points: number;
@@ -60,4 +60,3 @@ export interface AuthContextType {
   fetchUserProfile: (uid: string) => Promise<UserProfile | null>;
   sendPasswordReset: (email: string) => Promise<boolean>;
 }
-

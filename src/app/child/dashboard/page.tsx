@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,7 +42,7 @@ export default function ChildDashboardPage() {
           <div className="flex items-center space-x-2">
             <Star className="h-6 w-6 text-primary" />
             <span className="text-2xl font-bold text-primary">{currentPoints}</span>
-            <span className="text-sm text-muted-foreground">Points</span>
+            <span className="text-sm text-muted-foreground">pts</span>
           </div>
         </Card>
       </div>
@@ -61,7 +62,7 @@ export default function ChildDashboardPage() {
                   <li key={task.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
                     <div>
                       <p className="font-medium">{task.description}</p>
-                      <p className="text-sm text-primary">{task.points} Points</p>
+                      <p className="text-sm text-primary">{task.points} pts</p>
                     </div>
                     <Button size="sm" onClick={() => handleMarkTaskDone(task.id)}>
                       Mark as Done
@@ -102,7 +103,7 @@ export default function ChildDashboardPage() {
                   <li key={reward.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
                     <div>
                       <p className="font-medium">{reward.description}</p>
-                      <p className="text-sm text-primary">{reward.pointsCost} Points</p>
+                      <p className="text-sm text-primary">{reward.pointsCost} pts</p>
                     </div>
                     <Button 
                       size="sm" 

@@ -9,14 +9,25 @@ import {
   signInWithEmailAndPassword,
   signOut,
   createUserWithEmailAndPassword,
-  updateProfile
+  updateProfile,
+  sendPasswordResetEmail
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, collection, addDoc, writeBatch } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
-import type { UserProfile, AuthContextType } from '@/types';
+import { doc, getDoc, setDoc, serverTimestamp, collection, addDoc, writeBatch, updateDoc } from 'firebase/firestore';
+import { auth, db, createTemporaryAuthInstance } from '@/lib/firebase'; // Import primary auth and db
+import type { UserProfile, AuthContextType, Child } from '@/types';
 import { useRouter } from 'next/navigation';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Helper to generate random password
+const generateRandomPassword = (length: number = 8): string => {
+  const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let retVal = "";
+  for (let i = 0, n = charset.length; i < length; ++i) {
+    retVal += charset.charAt(Math.floor(Math.random() * n));
+  }
+  return retVal;
+};
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -48,10 +59,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (fetchedProfileData) {
           setUserProfile(fetchedProfileData);
         } else {
-          // If profile is not found, it might be a new user or an error.
-          // For existing sessions, this could mean the DB doc was deleted.
-          // For new sign-ups, profile is set during sign-up.
-           if (userProfile && userProfile.uid !== firebaseUser.uid) { // only reset if it's a different user profile
+           if (userProfile && userProfile.uid !== firebaseUser.uid) { 
              setUserProfile(null);
            }
         }
@@ -62,35 +70,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []); // Removed userProfile from dependency array to avoid loops if fetchUserProfile is unstable
+  }, []);
 
  const signUpParent = async (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId'> & {password: string}): Promise<FirebaseUser | null> => {
     setLoading(true);
     const { email, password, name, gender, age, phone } = details;
-    if (!email || !password || !name || !gender || age === undefined || !phone) {
+    if (!email || !password || !name || gender === undefined || age === undefined || !phone) { // check gender and age explicitly
       console.error("All fields are required for parent sign up.");
       setLoading(false);
       return null;
     }
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password); // Use primary auth
       const parentUser = userCredential.user;
-
-      // Update Firebase Auth user's display name (optional, but good practice)
       await updateProfile(parentUser, { displayName: name });
 
       const parentProfileData: UserProfile = {
         uid: parentUser.uid,
         role: 'parent',
-        email: parentUser.email!, // email is guaranteed from createUserWithEmailAndPassword
+        email: parentUser.email!,
         name,
         gender,
         age,
         phone,
       };
       await setDoc(doc(db, 'users', parentUser.uid), parentProfileData);
-      // setUser(parentUser); // Auth state listener will handle this
-      // setUserProfile(parentProfileData); // Auth state listener will fetch this
       setLoading(false);
       return parentUser;
     } catch (error: any) {
@@ -103,11 +107,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signInParentWithEmail = async (email: string, password: string): Promise<FirebaseUser | null> => {
     setLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const parentUser = userCredential.user;
-      // Auth state listener will fetch and set user and userProfile
+      const userCredential = await signInWithEmailAndPassword(auth, email, password); // Use primary auth
       setLoading(false);
-      return parentUser;
+      return userCredential.user;
     } catch (error: any) {
       console.error("Error signing in parent:", error.message, error.code);
       setLoading(false);
@@ -117,17 +119,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signInChildWithEmail = async (email: string, password: string): Promise<FirebaseUser | null> => {
     setLoading(true);
+    // Child login will use the primary auth instance by default,
+    // as it's expected the app is already configured for it.
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const childUser = userCredential.user;
-      // Auth state listener will fetch and set user and userProfile
-      // Ensure the fetched profile has role 'child'
       const profile = await fetchUserProfile(childUser.uid);
       if (profile && profile.role === 'child') {
         setLoading(false);
         return childUser;
       } else {
-        await signOut(auth); // Sign out if not a valid child
+        await signOut(auth); 
         throw new Error("Not a valid child account.");
       }
     } catch (error: any) {
@@ -137,88 +139,93 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // This function now aims to create a Firebase Auth user for the child
-  // AND a profile in /users collection AND a record in parent's /children subcollection
-  const signUpChildAndLinkToParent = async (parentAuthUid: string, childDetails: { name: string, email: string, password?: string }): Promise<UserProfile | null> => {
+  const signUpChildAndLinkToParent = async (
+    parentAuthUid: string, 
+    childDetails: { name: string, email: string }
+  ): Promise<{ userProfile: UserProfile; generatedPassword?: string } | null> => {
     setLoading(true);
-    const childPassword = childDetails.password || Math.random().toString(36).slice(-8); // Auto-generate if not provided
-
-    // This part is tricky because we're creating a new Firebase Auth user,
-    // which is usually done client-side by the user themselves.
-    // For a parent creating a child account, you'd typically use Firebase Admin SDK on a backend.
-    // Doing it client-side like this requires re-authenticating as the child to set up their profile or a more complex flow.
-    // For simplicity in this context, we'll focus on creating the DB records.
-    // A proper child auth creation would be more involved.
-
-    // Current approach: Create child record in parent's subcollection.
-    // Create a profile in /users for the child (which implies they can login directly later)
-    // For a real app, creating Firebase Auth user for child should be done carefully.
+    let tempAuthManager: { tempAuth: Auth; cleanup: () => Promise<void> } | null = null;
     
     try {
-      // Firestore batch write
-      const batch = writeBatch(db);
+      tempAuthManager = await createTemporaryAuthInstance();
+      const { tempAuth, cleanup } = tempAuthManager;
 
-      // 1. Create child document in parent's subcollection
-      const childSubcollectionRef = doc(collection(db, 'users', parentAuthUid, 'children'));
-      batch.set(childSubcollectionRef, {
-        name: childDetails.name,
-        email: childDetails.email,
-        points: 0,
-        // authUid will be set if we successfully create an auth user.
-      });
+      const generatedPassword = generateRandomPassword(8);
       
-      // SIMULATING child user profile creation for now.
-      // In a real app, if you create an Auth user for the child, use their actual UID here.
-      // This example will just create the profile document in /users.
-      // It won't create an actual Firebase Auth user without more complex steps or Admin SDK.
+      // 1. Create Firebase Auth user for the child using the temporary auth instance
+      const childAuthCredential = await createUserWithEmailAndPassword(tempAuth, childDetails.email, generatedPassword);
+      const newChildUser = childAuthCredential.user;
 
-      const tempChildUid = `child_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-      const childUserProfileRef = doc(db, 'users', tempChildUid);
+      // (Optional) Update child's auth profile displayName if needed (using tempAuth)
+      await updateProfile(newChildUser, { displayName: childDetails.name });
+
+      // 2. Create child's main profile in /users collection (using primary db)
       const childProfileForUsersCollection: UserProfile = {
-        uid: tempChildUid, // This would be the actual Firebase Auth UID of the child if created
+        uid: newChildUser.uid,
         role: 'child',
         email: childDetails.email,
         displayName: childDetails.name,
         parentId: parentAuthUid,
         points: 0,
       };
-      batch.set(childUserProfileRef, childProfileForUsersCollection);
-      
-      await batch.commit();
+      await setDoc(doc(db, 'users', newChildUser.uid), childProfileForUsersCollection);
 
-      console.log(`Child record and simulated profile created for ${childDetails.name}. Email: ${childDetails.email}, TempUID: ${tempChildUid}`);
-      // NOTE: This does NOT create a Firebase Auth user. For direct child login,
-      // you'd need a separate flow for the child to register with email/password or use Admin SDK.
-      // The 'signInChildWithEmail' would require a real Firebase Auth user.
+      // 3. Create/Update child record in parent's subcollection (using primary db)
+      //    For simplicity, we'll add a new one. If updating, you'd need the childDocId.
+      const childSubcollectionRef = collection(db, 'users', parentAuthUid, 'children');
+      const childDocInSubcollection = await addDoc(childSubcollectionRef, {
+        name: childDetails.name,
+        email: childDetails.email,
+        points: 0,
+        authUid: newChildUser.uid, // Store the actual Firebase Auth UID
+        createdAt: serverTimestamp(),
+      });
       
+      console.log(`Child Auth user and profile created for ${childDetails.name}. UID: ${newChildUser.uid}`);
+      
+      await cleanup(); // Clean up the temporary app
       setLoading(false);
-      return childProfileForUsersCollection; // Return the profile data created in /users
+      return { userProfile: childProfileForUsersCollection, generatedPassword };
+
     } catch (error: any) {
       console.error("Error in signUpChildAndLinkToParent:", error.message, error.code);
+      if (tempAuthManager) {
+        await tempAuthManager.cleanup(); // Ensure cleanup on error
+      }
       setLoading(false);
       return null;
     }
   };
 
-
   const signOutUser = async () => {
     setLoading(true);
     const currentRole = userProfile?.role;
     try {
-      await signOut(auth);
-      // setUser and setUserProfile will be cleared by onAuthStateChanged
-      // Redirect based on role before sign-out
+      await signOut(auth); // Sign out from primary auth
       if (currentRole === 'parent') {
         router.push('/parent/login');
       } else if (currentRole === 'child') {
-        router.push('/login'); // Child login page
+        router.push('/login'); 
       } else {
-        router.push('/'); // Role selection
+        router.push('/'); 
       }
     } catch (error) {
       console.error("Error signing out:", error);
     } finally {
-        setLoading(false); // Ensure loading is set to false
+        setLoading(false); 
+    }
+  };
+
+  const sendPasswordReset = async (email: string): Promise<boolean> => {
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email); // Use primary auth
+      setLoading(false);
+      return true;
+    } catch (error: any) {
+      console.error("Error sending password reset email:", error.message);
+      setLoading(false);
+      return false;
     }
   };
 
@@ -234,6 +241,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     signUpChildAndLinkToParent,
     signOutUser,
     fetchUserProfile,
+    sendPasswordReset,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

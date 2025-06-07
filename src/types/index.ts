@@ -4,41 +4,41 @@ import type { User as FirebaseUser } from 'firebase/auth';
 export interface UserProfile {
   uid: string;
   role: 'parent' | 'child';
-  email?: string; // For both, but primary for parent
-  displayName?: string; // Primarily for children, or as a fallback for parent's name
-  name?: string; // Parent's full name
-  gender?: 'male' | 'female' | 'other' | ''; // Parent's gender
-  age?: number; // Parent's age
-  phone?: string; // Parent's phone number
-  parentId?: string; // For children, linking to parent's UID
-  points?: number; // For children
+  email?: string; 
+  displayName?: string; 
+  name?: string; 
+  gender?: 'male' | 'female' | 'other' | ''; 
+  age?: number; 
+  phone?: string; 
+  parentId?: string; 
+  points?: number; 
 }
 
-export interface Child { // This type is for the subcollection under parent
-  id: string; // Firestore document ID
+export interface Child { 
+  id: string; 
   name: string;
-  email: string; // Child's email, used for potential future direct login
+  email: string; 
   points: number;
-  // authUid?: string; // Optional: Firebase Auth UID if child has direct login
+  authUid?: string; // Firebase Auth UID if child has direct login
 }
 
 export interface Task {
-  id: string; // Firestore document ID
+  id: string; 
   description: string;
   points: number;
-  assignedTo?: string; // Child's main user UID (from /users/{childAuthUid})
-  assignedToName?: string; // Denormalized child's name
+  assignedTo?: string; 
+  assignedToName?: string; 
   status: 'pending' | 'completed' | 'verified';
-  parentId: string; // Parent's authUid
-  createdAt: any; // Firebase Timestamp placeholder for serverTimestamp()
+  parentId: string; 
+  createdAt: any; 
 }
 
 export interface Reward {
-  id: string; // Firestore document ID
+  id: string; 
   description: string;
   pointsCost: number;
-  parentId: string; // Parent's authUid
-  createdAt: any; // Firebase Timestamp placeholder
+  parentId: string; 
+  createdAt: any; 
 }
 
 // Context state type
@@ -50,8 +50,12 @@ export interface AuthContextType {
   isChild: boolean;
   signUpParent: (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId'> & {password: string}) => Promise<FirebaseUser | null>;
   signInParentWithEmail: (email: string, password: string) => Promise<FirebaseUser | null>;
-  signInChildWithEmail: (email: string, password: string) => Promise<FirebaseUser | null>; // Assumes child has direct auth
-  signUpChildAndLinkToParent: (parentAuthUid: string, childDetails: { name: string, email: string, password?: string }) => Promise<UserProfile | null>; // Creates child record and potentially child auth user
+  signInChildWithEmail: (email: string, password: string) => Promise<FirebaseUser | null>; 
+  signUpChildAndLinkToParent: (
+    parentAuthUid: string, 
+    childDetails: { name: string, email: string }
+  ) => Promise<{ userProfile: UserProfile; generatedPassword?: string } | null>; // Return type updated
   signOutUser: () => Promise<void>;
   fetchUserProfile: (uid: string) => Promise<UserProfile | null>;
+  sendPasswordReset: (email: string) => Promise<boolean>; // New method
 }

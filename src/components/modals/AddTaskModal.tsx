@@ -31,7 +31,7 @@ const taskFormSchema = z.object({
 type TaskFormValues = z.infer<typeof taskFormSchema>;
 
 export default function AddTaskModal({ isOpen, onClose, onTaskAdded }: AddTaskModalProps) {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth(); // Added userProfile for logging
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -59,13 +59,18 @@ export default function AddTaskModal({ isOpen, onClose, onTaskAdded }: AddTaskMo
         // assignedTo: data.assignedTo || null, // For future implementation
         // assignedToName: data.assignedTo ? findChildName(data.assignedTo) : null // For future implementation
       };
+
+      console.log("Attempting to add task with data:", JSON.stringify(taskData, null, 2));
+      console.log("Current user (for parentId check):", user.uid);
+      console.log("Current user profile (for role check):", JSON.stringify(userProfile, null, 2));
+
       await addDoc(collection(db, 'tasks'), taskData);
       
       toast({ title: "Task Added", description: `Task "${data.description}" has been created successfully.` });
       reset();
       onClose();
       if (onTaskAdded) {
-        onTaskAdded(); // Callback to potentially refresh list, though onSnapshot handles it
+        onTaskAdded();
       }
     } catch (error: any) {
       console.error("Error adding task:", error);

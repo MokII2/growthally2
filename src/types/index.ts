@@ -1,16 +1,21 @@
+
 import type { User as FirebaseUser } from 'firebase/auth';
 
 export interface UserProfile {
   uid: string;
   role: 'parent' | 'child';
-  email?: string; 
-  displayName?: string;
-  parentId?: string; 
-  points?: number; 
+  email?: string;
+  displayName?: string; // For children or as a fallback for parent's name
+  name?: string; // Parent's full name
+  gender?: 'male' | 'female' | 'other' | ''; // Parent's gender
+  age?: number; // Parent's age
+  phone?: string; // Parent's phone number
+  parentId?: string;
+  points?: number;
 }
 
 export interface Child {
-  id: string; 
+  id: string;
   name: string;
   email: string;
   points: number;
@@ -43,7 +48,8 @@ export interface AuthContextType {
   loading: boolean;
   isParent: boolean;
   isChild: boolean;
-  signInParentAnonymously: () => Promise<FirebaseUser | null>;
+  signUpParent: (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId'> & {password: string}) => Promise<FirebaseUser | null>;
+  signInParentWithEmail: (email: string, password: string) => Promise<FirebaseUser | null>;
   signInChildWithEmail: (email: string, password: string) => Promise<FirebaseUser | null>;
   signUpChildAndLinkToParent: (parentAuthUid: string, childDetails: { name: string, email: string, password?: string }) => Promise<UserProfile | null>;
   signOutUser: () => Promise<void>;

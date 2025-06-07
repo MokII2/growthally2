@@ -3,11 +3,10 @@
 
 import type { ReactNode } from 'react';
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { 
-  User as FirebaseUser, 
-  onAuthStateChanged, 
-  signInAnonymously, 
-  signInWithEmailAndPassword, 
+import {
+  User as FirebaseUser,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
   signOut,
   createUserWithEmailAndPassword
 } from 'firebase/auth';
@@ -48,18 +47,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (fetchedProfileData) {
           setUserProfile(fetchedProfileData);
         } else {
-          // If profile fetch failed (returned null):
-          // Check if there's an existing userProfile in state with the same UID.
-          // This can happen if a sign-in function (e.g., signInParentAnonymously)
-          // set the profile, and Firestore read consistency caused fetchUserProfile 
-          // to return null temporarily for the new record.
-          // In this case, we don't want to nullify the already set profile.
           if (!(userProfile && userProfile.uid === firebaseUser.uid)) {
-            // Only set to null if there's no existing matching profile in state.
             setUserProfile(null);
           }
-          // If userProfile (from state) exists and userProfile.uid matches firebaseUser.uid,
-          // we preserve the userProfile state, assuming it was correctly set by a sign-in function.
         }
       } else {
         setUser(null);
@@ -68,26 +58,59 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []); // Keep dependency array empty for onAuthStateChanged setup
+  }, []);
 
-  const signInParentAnonymously = async (): Promise<FirebaseUser | null> => {
+  const signUpParent = async (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId'> & {password: string}): Promise<FirebaseUser | null> => {
+    setLoading(true);
+    const { email, password, name, gender, age, phone } = details;
+    if (!email || !password) {
+      console.error("Email and password are required for parent sign up.");
+      setLoading(false);
+      return null;
+    }
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const parentUser = userCredential.user;
+      const parentProfileData: UserProfile = {
+        uid: parentUser.uid,
+        role: 'parent',
+        email: parentUser.email || email,
+        name,
+        gender,
+        age,
+        phone,
+      };
+      await setDoc(doc(db, 'users', parentUser.uid), parentProfileData);
+      setUser(parentUser);
+      setUserProfile(parentProfileData);
+      setLoading(false);
+      return parentUser;
+    } catch (error) {
+      console.error("Error signing up parent:", error);
+      setLoading(false);
+      return null;
+    }
+  };
+
+  const signInParentWithEmail = async (email: string, password: string): Promise<FirebaseUser | null> => {
     setLoading(true);
     try {
-      const userCredential = await signInAnonymously(auth);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const parentUser = userCredential.user;
       if (parentUser) {
-        const parentProfileData: UserProfile = {
-          uid: parentUser.uid,
-          role: 'parent',
-        };
-        await setDoc(doc(db, 'users', parentUser.uid), parentProfileData);
-        setUser(parentUser);
-        setUserProfile(parentProfileData); // Set profile directly
+         const profile = await fetchUserProfile(parentUser.uid);
+         if (profile && profile.role === 'parent') {
+            setUser(parentUser);
+            setUserProfile(profile);
+         } else {
+            await signOut(auth);
+            throw new Error("Invalid parent account or role mismatch.");
+         }
       }
       setLoading(false);
       return parentUser;
     } catch (error) {
-      console.error("Error signing in parent anonymously:", error);
+      console.error("Error signing in parent:", error);
       setLoading(false);
       return null;
     }
@@ -104,7 +127,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setUser(childUser);
             setUserProfile(profile);
          } else {
-            await signOut(auth); 
+            await signOut(auth);
             throw new Error("Invalid child account.");
          }
       }
@@ -116,36 +139,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return null;
     }
   };
-  
+
   const signUpChildAndLinkToParent = async (parentAuthUid: string, childDetails: { name: string, email: string, password?: string }): Promise<UserProfile | null> => {
     setLoading(true);
-    if (!childDetails.password) { 
+    if (!childDetails.password) {
         childDetails.password = Math.random().toString(36).slice(-8);
     }
     try {
-      // This function currently only adds a document to a subcollection in Firestore
-      // and does not create an actual Firebase Auth user for the child.
-      // This might need to be revisited if children need to log in independently with email/password.
-      // For now, it simulates a child profile linked to a parent.
       const childProfile: UserProfile = {
-        uid: `temp_child_uid_${Date.now()}`, // Placeholder UID, not a real Auth UID
+        uid: `temp_child_uid_${Date.now()}`,
         role: 'child',
         email: childDetails.email,
         displayName: childDetails.name,
         parentId: parentAuthUid,
         points: 0,
       };
-      // Storing child's details under parent's document in a 'children' subcollection.
-      const childDocRef = await addDoc(collection(db, 'users', parentAuthUid, 'children'), {
+      await addDoc(collection(db, 'users', parentAuthUid, 'children'), {
         name: childDetails.name,
         email: childDetails.email,
         points: 0,
-        // password: childDetails.password // Storing password like this is not recommended.
-                                         // Actual auth creation for child needed for real login.
       });
-      // The returned 'childProfile' is a local representation, not a full auth user.
       setLoading(false);
-      return childProfile; 
+      return childProfile;
     } catch (error) {
       console.error("Error signing up child:", error);
       setLoading(false);
@@ -155,11 +170,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOutUser = async () => {
     setLoading(true);
+    const currentRole = userProfile?.role;
     try {
       await signOut(auth);
       setUser(null);
       setUserProfile(null);
-      router.push('/'); 
+      // Redirect to appropriate login page or role selection
+      if (currentRole === 'parent') {
+        router.push('/parent/login');
+      } else if (currentRole === 'child') {
+        router.push('/login');
+      } else {
+        router.push('/');
+      }
     } catch (error) {
       console.error("Error signing out:", error);
     }
@@ -172,7 +195,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     loading,
     isParent: userProfile?.role === 'parent',
     isChild: userProfile?.role === 'child',
-    signInParentAnonymously,
+    signUpParent,
+    signInParentWithEmail,
     signInChildWithEmail,
     signUpChildAndLinkToParent,
     signOutUser,

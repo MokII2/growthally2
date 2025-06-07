@@ -15,7 +15,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, collection, addDoc, writeBatch, updateDoc } from 'firebase/firestore';
 import { auth, db, createTemporaryAuthInstance } from '@/lib/firebase'; // Import primary auth and db
-import type { UserProfile, AuthContextType } from '@/types';
+import type { UserProfile, AuthContextType, Child } from '@/types';
 import { useRouter } from 'next/navigation';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -61,7 +61,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setUserProfile(fetchedProfileData);
         } else {
            // If no profile data, but firebaseUser exists, ensure userProfile is nullified if it's for a different user
-           if (userProfile && userProfile.uid !== firebaseUser.uid) { 
+           if (userProfile && userProfile.uid !== firebaseUser.uid) {
              setUserProfile(null);
            }
         }
@@ -77,13 +77,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
  const signUpParent = async (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId'> & {password: string}): Promise<FirebaseUser | null> => {
     setLoading(true);
     const { email, password, name, gender, age, phone } = details;
-    if (!email || !password || !name || gender === undefined || age === undefined || !phone) { 
+    if (!email || !password || !name || gender === undefined || age === undefined || !phone) {
       console.error("All fields are required for parent sign up.");
       setLoading(false);
       return null;
     }
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password); 
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const parentUser = userCredential.user;
       await updateProfile(parentUser, { displayName: name });
 
@@ -109,7 +109,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signInParentWithEmail = async (email: string, password: string): Promise<FirebaseUser | null> => {
     setLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password); 
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
       // Profile will be fetched by onAuthStateChanged
       setLoading(false);
       return userCredential.user;
@@ -132,7 +132,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return childUser;
       } else {
         // If not a child, sign out this user from the main auth state to prevent unauthorized access
-        await signOut(auth); 
+        await signOut(auth);
         throw new Error("Not a valid child account.");
       }
     } catch (error: any) {
@@ -143,18 +143,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signUpChildAndLinkToParent = async (
-    parentAuthUid: string, 
+    parentAuthUid: string,
     childDetails: { name: string, email: string }
   ): Promise<{ userProfile: UserProfile; generatedPassword?: string } | null> => {
     setLoading(true);
     let tempAuthManager: { tempAuth: Auth; cleanup: () => Promise<void> } | null = null;
-    
+
     try {
       tempAuthManager = await createTemporaryAuthInstance();
       const { tempAuth, cleanup } = tempAuthManager;
 
       const generatedPassword = generateRandomPassword(8);
-      
+
       const childAuthCredential = await createUserWithEmailAndPassword(tempAuth, childDetails.email, generatedPassword);
       const newChildUser = childAuthCredential.user;
 
@@ -172,20 +172,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await setDoc(doc(db, 'users', newChildUser.uid), childProfileForUsersCollection);
 
       // Add/Update the child's record in the parent's subcollection
-      // For simplicity, we assume one record per email in the subcollection for now,
-      // or create a new one. A more robust approach might query for existing child by email first.
-      const childSubcollectionRef = collection(db, 'users', parentAuthUid, 'children');
-      await addDoc(childSubcollectionRef, { // Using addDoc to create a new document with auto-ID
+      const childSubcollectionDocData: Omit<Child, 'id'> = { // Use Omit to ensure all fields of Child (except id) are considered
         name: childDetails.name,
-        email: childDetails.email, // Store email for reference
+        email: childDetails.email,
         points: 0,
-        authUid: newChildUser.uid, // Link to the child's actual Auth UID
+        authUid: newChildUser.uid,
         createdAt: serverTimestamp(),
-        initialPassword: generatedPassword, // Store the generated password for display on parent dashboard
-      });
-      
+        initialPassword: generatedPassword,
+      };
+      await addDoc(collection(db, 'users', parentAuthUid, 'children'), childSubcollectionDocData);
+
       console.log(`Child Auth user and profile created for ${childDetails.name}. UID: ${newChildUser.uid}. Initial Password: ${generatedPassword}`);
-      
+
       await cleanup(); // Clean up the temporary auth instance
       setLoading(false);
       return { userProfile: childProfileForUsersCollection, generatedPassword };
@@ -193,11 +191,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error: any) {
       console.error("Error in signUpChildAndLinkToParent:", error.message, error.code);
       if (tempAuthManager) {
-        await tempAuthManager.cleanup(); 
+        await tempAuthManager.cleanup();
       }
       setLoading(false);
-      // Re-throw the error so the calling component can inspect its code
-      throw error; 
+      throw error; // Re-throw the error so the calling component can inspect its code
     }
   };
 
@@ -205,15 +202,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     const currentRole = userProfile?.role;
     try {
-      await signOut(auth); 
+      await signOut(auth);
       // After sign out, user and userProfile will be set to null by onAuthStateChanged
       // Redirect based on role before sign-out
       if (currentRole === 'parent') {
         router.push('/parent/login');
       } else if (currentRole === 'child') {
-        router.push('/login'); 
+        router.push('/login');
       } else {
-        router.push('/'); 
+        router.push('/');
       }
     } catch (error) {
       console.error("Error signing out:", error);
@@ -225,7 +222,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const sendPasswordReset = async (email: string): Promise<boolean> => {
     setLoading(true);
     try {
-      await sendPasswordResetEmail(auth, email); 
+      await sendPasswordResetEmail(auth, email);
       setLoading(false);
       return true;
     } catch (error: any) {

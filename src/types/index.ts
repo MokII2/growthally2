@@ -20,6 +20,7 @@ export interface Child {
   email: string; 
   points: number;
   authUid?: string; // Firebase Auth UID if child has direct login
+  initialPassword?: string; // For parent to see child's first password
 }
 
 export interface Task {
@@ -57,5 +58,6 @@ export interface AuthContextType {
   ) => Promise<{ userProfile: UserProfile; generatedPassword?: string } | null>; // Return type updated
   signOutUser: () => Promise<void>;
   fetchUserProfile: (uid: string) => Promise<UserProfile | null>;
-  sendPasswordReset: (email: string) => Promise<boolean>; // New method
+  sendPasswordReset: (email: string) => Promise<boolean>;
 }
+

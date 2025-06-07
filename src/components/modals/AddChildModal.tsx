@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, type FormEvent } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,8 +11,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Terminal } from 'lucide-react';
+// Removed Alert components and Terminal icon as password will be on dashboard
 
 interface AddChildModalProps {
   isOpen: boolean;
@@ -31,8 +30,7 @@ export default function AddChildModal({ isOpen, onClose, onChildAdded }: AddChil
   const { signUpChildAndLinkToParent, user } = useAuth();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [generatedPasswordInfo, setGeneratedPasswordInfo] = useState<{ email: string; password?: string } | null>(null);
-
+  // Removed generatedPasswordInfo state, as it's no longer displayed in modal
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm<ChildFormValues>({
     resolver: zodResolver(childFormSchema),
@@ -48,23 +46,17 @@ export default function AddChildModal({ isOpen, onClose, onChildAdded }: AddChil
       return;
     }
     setIsSubmitting(true);
-    setGeneratedPasswordInfo(null); // Reset password info
 
     try {
       const result = await signUpChildAndLinkToParent(user.uid, { name: data.name, email: data.email });
       if (result && result.userProfile) {
         toast({ 
           title: "Child Account Created!", 
-          description: `${result.userProfile.displayName}'s account is ready.`,
+          description: `${result.userProfile.displayName}'s account is ready. You can find their initial password on your dashboard.`,
           duration: 7000 
         });
-        if (result.generatedPassword) {
-          setGeneratedPasswordInfo({ email: result.userProfile.email!, password: result.generatedPassword });
-        }
         reset();
-        // Keep modal open to show password, or close and show in toast only.
-        // For now, we'll show it in an alert inside the modal. Parent can close manually.
-        // onClose(); // Parent closes manually after seeing password
+        onClose(); // Close modal on success
         if (onChildAdded) {
             onChildAdded(); 
         }
@@ -81,7 +73,7 @@ export default function AddChildModal({ isOpen, onClose, onChildAdded }: AddChil
   const handleCloseDialog = () => {
     if (!isSubmitting) {
       reset();
-      setGeneratedPasswordInfo(null);
+      // setGeneratedPasswordInfo(null); // No longer needed
       onClose();
     }
   };
@@ -94,47 +86,28 @@ export default function AddChildModal({ isOpen, onClose, onChildAdded }: AddChil
         <DialogHeader>
           <DialogTitle>Add New Child Account</DialogTitle>
           <DialogDescription>
-            Enter the child's name and email. An account with an initial password will be created.
+            Enter the child's name and email. An account with an initial password will be created. You can view this password on your dashboard.
           </DialogDescription>
         </DialogHeader>
-        {!generatedPasswordInfo ? (
-          <form onSubmit={handleSubmit(processSubmit)} className="grid gap-6 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Child's Name</Label>
-              <Input id="name" {...register("name")} placeholder="e.g., Alex Smith" className={errors.name ? "border-destructive" : ""} />
-              {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Child's Email</Label>
-              <Input id="email" type="email" {...register("email")} placeholder="e.g., alex@example.com" className={errors.email ? "border-destructive" : ""} />
-              {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={handleCloseDialog} disabled={isSubmitting}>Cancel</Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Creating Account..." : "Create Child Account"}
-              </Button>
-            </DialogFooter>
-          </form>
-        ) : (
-          <div className="space-y-4 py-4">
-            <Alert variant="default" className="bg-green-50 border-green-200 dark:bg-green-900/30 dark:border-green-700">
-              <Terminal className="h-4 w-4 text-green-600 dark:text-green-400" />
-              <AlertTitle className="font-semibold text-green-700 dark:text-green-300">Account Created Successfully!</AlertTitle>
-              <AlertDescription className="text-green-600 dark:text-green-400">
-                Please provide the following credentials to your child:
-                <ul className="mt-2 list-disc list-inside text-sm">
-                  <li><strong>Email:</strong> {generatedPasswordInfo.email}</li>
-                  <li><strong>Initial Password:</strong> <strong className="text-base font-mono tracking-wider bg-green-100 dark:bg-green-800 px-1 py-0.5 rounded">{generatedPasswordInfo.password}</strong></li>
-                </ul>
-                They can log in and should be prompted to change their password or can use the "Forgot Password" option later.
-              </AlertDescription>
-            </Alert>
-            <DialogFooter>
-              <Button onClick={handleCloseDialog}>Close</Button>
-            </DialogFooter>
+        {/* Form is now always visible, no conditional rendering for password info */}
+        <form onSubmit={handleSubmit(processSubmit)} className="grid gap-6 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="name-add-child">Child's Name</Label>
+            <Input id="name-add-child" {...register("name")} placeholder="e.g., Alex Smith" className={errors.name ? "border-destructive" : ""} />
+            {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
           </div>
-        )}
+          <div className="space-y-2">
+            <Label htmlFor="email-add-child">Child's Email</Label>
+            <Input id="email-add-child" type="email" {...register("email")} placeholder="e.g., alex@example.com" className={errors.email ? "border-destructive" : ""} />
+            {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={handleCloseDialog} disabled={isSubmitting}>Cancel</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Creating Account..." : "Create Child Account"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

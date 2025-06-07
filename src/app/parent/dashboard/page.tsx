@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Users, ListChecks, Award } from "lucide-react"; // Removed Edit3, Trash2 for now
+import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy } from "lucide-react"; // Added KeyRound, Copy
 import AddChildModal from "@/components/modals/AddChildModal";
 import AddTaskModal from "@/components/modals/AddTaskModal";
 import AddRewardModal from "@/components/modals/AddRewardModal";
@@ -13,6 +13,7 @@ import { collection, query, where, onSnapshot, orderBy } from "firebase/firestor
 import { db } from "@/lib/firebase";
 import type { Child, Task, Reward } from "@/types";
 import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge"; // Added Badge
 
 export default function ParentDashboardPage() {
   const { user } = useAuth();
@@ -26,10 +27,9 @@ export default function ParentDashboardPage() {
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
   const [isAddRewardModalOpen, setIsAddRewardModalOpen] = useState(false);
 
-  // Fetch children
   useEffect(() => {
     if (!user) return;
-    const childrenQuery = query(collection(db, "users", user.uid, "children"));
+    const childrenQuery = query(collection(db, "users", user.uid, "children"), orderBy("name", "asc"));
     const unsubscribe = onSnapshot(childrenQuery, (snapshot) => {
       const fetchedChildren: Child[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Child));
       setChildren(fetchedChildren);
@@ -40,7 +40,6 @@ export default function ParentDashboardPage() {
     return () => unsubscribe();
   }, [user, toast]);
 
-  // Fetch tasks
   useEffect(() => {
     if (!user) return;
     const tasksQuery = query(
@@ -58,7 +57,6 @@ export default function ParentDashboardPage() {
     return () => unsubscribe();
   }, [user, toast]);
 
-  // Fetch rewards
   useEffect(() => {
     if (!user) return;
     const rewardsQuery = query(
@@ -77,15 +75,17 @@ export default function ParentDashboardPage() {
   }, [user, toast]);
 
   const handleDataRefreshNeeded = () => {
-    // onSnapshot handles real-time updates, so this is less critical
-    // but can be used for other one-off refresh needs if any.
     console.log("Data refresh explicitly triggered (though onSnapshot should cover most cases).");
   };
-  
-  // Placeholder delete functions - will be implemented later
-  // const handleDeleteChild = (childId: string) => alert(`Delete child ${childId} - Placeholder`);
-  // const handleDeleteTask = (taskId: string) => alert(`Delete task ${taskId} - Placeholder`);
-  // const handleDeleteReward = (rewardId: string) => alert(`Delete reward ${rewardId} - Placeholder`);
+
+  const copyToClipboard = (text: string, itemName: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      toast({ title: "Copied!", description: `${itemName} copied to clipboard.`});
+    }).catch(err => {
+      toast({ title: "Copy Failed", description: `Could not copy ${itemName}.`, variant: "destructive"});
+      console.error('Failed to copy text: ', err);
+    });
+  };
 
   return (
     <div className="space-y-8">
@@ -97,7 +97,6 @@ export default function ParentDashboardPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Children Management */}
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xl font-medium">
@@ -109,23 +108,38 @@ export default function ParentDashboardPage() {
           </CardHeader>
           <CardContent>
             {children.length > 0 ? (
-              <ul className="space-y-2">
+              <ul className="space-y-3">
                 {children.map(child => (
-                  <li key={child.id} className="flex items-center justify-between p-3 rounded-md bg-secondary/30 hover:bg-secondary/40 transition-colors">
-                    <div>
-                      <span className="font-medium">{child.name}</span>
-                      <p className="text-xs text-muted-foreground">{child.email}</p>
+                  <li key={child.id} className="p-3 rounded-md bg-secondary/30 hover:bg-secondary/40 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-medium">{child.name}</span>
+                        <p className="text-xs text-muted-foreground">{child.email}</p>
+                      </div>
+                      <Badge variant="outline">{child.points ?? 0} pts</Badge>
                     </div>
-                    {/* Edit/Delete buttons placeholder - for future implementation
-                    <div className="flex items-center space-x-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => alert(`Edit ${child.name}`)}>
-                        <Edit3 className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteChild(child.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                    */}
+                    {child.initialPassword && (
+                      <div className="mt-2 p-2 rounded-md bg-accent/50 border border-accent">
+                        <div className="flex items-center justify-between">
+                           <div>
+                            <p className="text-xs font-semibold text-primary flex items-center">
+                                <KeyRound className="h-3 w-3 mr-1.5" /> Initial Password:
+                            </p>
+                            <p className="text-sm font-mono tracking-wider text-foreground">{child.initialPassword}</p>
+                           </div>
+                           <Button 
+                             variant="ghost" 
+                             size="icon" 
+                             className="h-7 w-7"
+                             onClick={() => copyToClipboard(child.initialPassword!, `${child.name}'s initial password`)}
+                             title="Copy password"
+                           >
+                             <Copy className="h-4 w-4" />
+                           </Button>
+                        </div>
+                        <p className="mt-1 text-[11px] text-muted-foreground">Share this with {child.name} for their first login. They should change it afterwards.</p>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -135,7 +149,6 @@ export default function ParentDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Tasks Management */}
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xl font-medium">
@@ -156,16 +169,6 @@ export default function ParentDashboardPage() {
                     </div>
                     {task.assignedToName && <p className="text-xs text-muted-foreground">Assigned to: {task.assignedToName}</p>}
                     <p className="text-xs text-muted-foreground capitalize">Status: {task.status}</p>
-                     {/* Edit/Delete buttons placeholder
-                    <div className="flex items-center space-x-1 mt-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => alert(`Edit ${task.description}`)}>
-                        <Edit3 className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteTask(task.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                    */}
                   </li>
                 ))}
               </ul>
@@ -175,7 +178,6 @@ export default function ParentDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Rewards Management */}
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xl font-medium">
@@ -194,16 +196,6 @@ export default function ParentDashboardPage() {
                       <span className="font-medium">{reward.description}</span>
                     </div>
                     <span className="text-sm text-primary">{reward.pointsCost} Points</span>
-                    {/* Edit/Delete buttons placeholder
-                    <div className="flex items-center space-x-1">
-                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => alert(`Edit ${reward.description}`)}>
-                        <Edit3 className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteReward(reward.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                    */}
                   </li>
                 ))}
               </ul>
@@ -214,7 +206,6 @@ export default function ParentDashboardPage() {
         </Card>
       </div>
 
-      {/* Modals */}
       <AddChildModal 
         isOpen={isAddChildModalOpen} 
         onClose={() => setIsAddChildModalOpen(false)}
@@ -233,3 +224,4 @@ export default function ParentDashboardPage() {
     </div>
   );
 }
+

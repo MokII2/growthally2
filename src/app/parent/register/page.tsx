@@ -29,10 +29,10 @@ export default function ParentRegisterPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (user && isParent) {
+    if (!loading && user && isParent) {
       router.replace('/parent/dashboard');
     }
-  }, [user, isParent, router]);
+  }, [user, isParent, loading, router]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -43,11 +43,17 @@ export default function ParentRegisterPage() {
       toast({ title: "Registration Failed", description: "Passwords do not match.", variant: "destructive" });
       return;
     }
-    if (!email || !name || !gender || age === '' || !phone) {
+    if (!email || !name || !gender || age === '' || !phone || !password) {
         setError('Please fill in all required fields.');
         toast({ title: "Registration Failed", description: "Please fill in all required fields.", variant: "destructive" });
         return;
     }
+    if (Number(age) < 18) {
+        setError('Age must be 18 or older.');
+        toast({ title: "Registration Failed", description: "Age must be 18 or older.", variant: "destructive" });
+        return;
+    }
+
 
     const parentDetails: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId'> & {password: string} = {
       name,
@@ -55,22 +61,26 @@ export default function ParentRegisterPage() {
       age: Number(age),
       email,
       phone,
-      password,
+      password, // Password is included for signUpParent function
     };
 
     const newParentUser = await signUpParent(parentDetails);
 
     if (newParentUser) {
-      toast({ title: "Registration Successful!", description: "Welcome! You can now log in."});
+      toast({ title: "Registration Successful!", description: "Welcome! Please log in to continue."});
       router.push('/parent/login'); // Redirect to login after successful registration
     } else {
+      // Error message is often generic from Firebase, e.g. email already in use.
       setError('Registration failed. The email might already be in use or there was a server error.');
-      toast({ title: "Registration Failed", description: "Please try again. Email might be in use.", variant: "destructive" });
+      toast({ title: "Registration Failed", description: "Please try again. Email might be in use or password is too weak.", variant: "destructive" });
     }
   };
   
-  if (user && isParent) {
-    return <div className="flex h-screen items-center justify-center"><p>Redirecting to dashboard...</p></div>;
+  if (!loading && user && isParent) {
+     return <div className="flex h-screen items-center justify-center"><p>Redirecting to dashboard...</p></div>;
+  }
+  if (loading && !user) {
+     return <div className="flex h-screen items-center justify-center"><p>Loading...</p></div>;
   }
 
   return (
@@ -87,18 +97,18 @@ export default function ParentRegisterPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="name">Full Name</Label>
-                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required className="bg-background/70"/>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="age">Age</Label>
-                <Input id="age" type="number" value={age} onChange={(e) => setAge(e.target.value === '' ? '' : parseInt(e.target.value, 10))} required min="18" />
+                <Input id="age" type="number" value={age} onChange={(e) => setAge(e.target.value === '' ? '' : parseInt(e.target.value, 10))} required min="18" className="bg-background/70"/>
               </div>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="gender">Gender</Label>
               <Select value={gender} onValueChange={(value) => setGender(value as 'male' | 'female' | 'other' | '')} required>
-                <SelectTrigger id="gender">
+                <SelectTrigger id="gender" className="bg-background/70">
                   <SelectValue placeholder="Select gender" />
                 </SelectTrigger>
                 <SelectContent>
@@ -111,20 +121,20 @@ export default function ParentRegisterPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="bg-background/70"/>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="phone">Phone Number</Label>
-              <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+              <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required className="bg-background/70"/>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                <Label htmlFor="password">Password (min. 6 characters)</Label>
+                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="bg-background/70"/>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+                <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="bg-background/70"/>
               </div>
             </div>
             

@@ -21,26 +21,33 @@ export default function ParentLoginPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (user && isParent) {
+    if (!loading && user && isParent) {
       router.replace('/parent/dashboard');
     }
-  }, [user, isParent, router]);
+  }, [user, isParent, loading, router]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
     const parentUser = await signInParentWithEmail(email, password);
     if (parentUser) {
+      // The useEffect above will handle redirect if login is successful and profile is loaded.
       toast({ title: "Login Successful!", description: "Welcome back, Parent!"});
-      router.push('/parent/dashboard');
+      // router.push('/parent/dashboard'); // This might be redundant if useEffect handles it
     } else {
       setError('Invalid email or password. Please try again or register if you are new.');
       toast({ title: "Login Failed", description: "Invalid email or password.", variant: "destructive" });
     }
   };
 
-  if (user && isParent) {
+  if (!loading && user && isParent) {
+    // Already logged in as parent and profile loaded, show loading or redirect.
+    // This state should ideally be caught by useEffect redirecting quickly.
     return <div className="flex h-screen items-center justify-center"><p>Redirecting to dashboard...</p></div>;
+  }
+  
+  if (loading && !user) { // Show loading only when initially checking auth state or during login process
+     return <div className="flex h-screen items-center justify-center"><p>Loading...</p></div>;
   }
 
 

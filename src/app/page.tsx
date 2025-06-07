@@ -15,21 +15,22 @@ export default function RoleSelectionPage() {
   useEffect(() => {
     if (!loading && user) {
       if (isParent) {
-        router.push('/parent/dashboard');
+        router.replace('/parent/dashboard');
       } else if (isChild) {
-        router.push('/child/dashboard');
+        router.replace('/child/dashboard');
       }
-      // If user is logged in but role is not determined, they stay here or handle as needed
+      // If user is logged in but role is not determined, they might stay here or be redirected by layout guards.
     }
   }, [user, loading, isParent, isChild, router]);
 
 
   const handleParentPortalRedirect = () => {
+    // Navigate to the new parent login page
     router.push('/parent/login');
   };
 
   const handleChildLoginRedirect = () => {
-    router.push('/login');
+    router.push('/login'); // This is the existing child login page
   };
 
   if (loading) {

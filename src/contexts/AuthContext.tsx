@@ -57,13 +57,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (firebaseUser) {
         setUser(firebaseUser);
         const fetchedProfileData = await fetchUserProfile(firebaseUser.uid);
-        if (fetchedProfileData) {
-          setUserProfile(fetchedProfileData);
-        } else {
-           if (userProfile && userProfile.uid !== firebaseUser.uid) {
-             setUserProfile(null);
-           }
-        }
+        setUserProfile(fetchedProfileData); // Simplified: directly set, handles null if profile not found
       } else {
         setUser(null);
         setUserProfile(null);
@@ -71,7 +65,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []); // Removed userProfile from dependency array to prevent re-fetches on local profile changes
+  }, []);
 
  const signUpParent = async (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId' | 'hobbies'> & {password: string}): Promise<FirebaseUser | null> => {
     setLoading(true);
@@ -125,13 +119,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const childUser = userCredential.user;
       const profile = await fetchUserProfile(childUser.uid);
       if (profile && profile.role === 'child') {
+        // onAuthStateChanged will handle setting user and userProfile globally
         setLoading(false);
         return childUser;
       } else {
-        await signOut(auth); // Sign out if not a valid child
+        await signOut(auth); 
         setLoading(false);
         console.error("Attempted login for non-child account or profile missing.");
-        return null; // Return null to indicate failure
+        return null; 
       }
     } catch (error: any) {
       console.error("Error signing in child:", error.message, error.code);
@@ -203,7 +198,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         await tempAuthManager.cleanup();
       }
       setLoading(false);
-      // Instead of throwing, return an error object
       return { error: { code: error.code, message: error.message } };
     }
   };
@@ -213,7 +207,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const currentRole = userProfile?.role;
     try {
       await signOut(auth);
-      // Clear local state immediately
       setUser(null);
       setUserProfile(null);
       if (currentRole === 'parent') {
@@ -226,7 +219,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error("Error signing out:", error);
     } finally {
-        setLoading(false); // Ensure loading is set to false even if navigation hasn't completed
+        setLoading(false); 
     }
   };
 

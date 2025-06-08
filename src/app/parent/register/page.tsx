@@ -14,13 +14,17 @@ import { UserPlus, LogIn, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/types';
 
+// Password validation regex: 
+// At least 8 characters, one uppercase, one lowercase, one number
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$/;
+
 export default function ParentRegisterPage() {
   const router = useRouter();
   const { signUpParent, loading, user, isParent } = useAuth();
   const { toast } = useToast();
 
   const [name, setName] = useState('');
-  const [gender, setGender] = useState<'male' | 'female' | 'other' | ''>('');
+  const [gender, setGender] = useState<'male' | 'female' | ''>('');
   const [age, setAge] = useState<number | ''>('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -38,12 +42,7 @@ export default function ParentRegisterPage() {
     event.preventDefault();
     setError('');
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      toast({ title: "Registration Failed", description: "Passwords do not match.", variant: "destructive" });
-      return;
-    }
-    if (!email || !name || !gender || age === '' || !phone || !password) {
+    if (!email || !name || !gender || age === '' || !phone || !password || !confirmPassword) {
         setError('Please fill in all required fields.');
         toast({ title: "Registration Failed", description: "Please fill in all required fields.", variant: "destructive" });
         return;
@@ -53,26 +52,39 @@ export default function ParentRegisterPage() {
         toast({ title: "Registration Failed", description: "Age must be 18 or older.", variant: "destructive" });
         return;
     }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      toast({ title: "Registration Failed", description: "Passwords do not match.", variant: "destructive" });
+      return;
+    }
+    if (!PASSWORD_REGEX.test(password)) {
+      setError('Password must be at least 8 characters, including uppercase, lowercase, and a number.');
+      toast({ 
+        title: "Weak Password", 
+        description: "Password must be at least 8 characters and include at least one uppercase letter, one lowercase letter, and one number.", 
+        variant: "destructive",
+        duration: 7000 
+      });
+      return;
+    }
 
-
-    const parentDetails: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId'> & {password: string} = {
+    const parentDetails: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId' | 'hobbies'> & {password: string} = {
       name,
       gender,
       age: Number(age),
       email,
       phone,
-      password, // Password is included for signUpParent function
+      password,
     };
 
     const newParentUser = await signUpParent(parentDetails);
 
     if (newParentUser) {
       toast({ title: "Registration Successful!", description: "Welcome! Please log in to continue."});
-      router.push('/parent/login'); // Redirect to login after successful registration
+      router.push('/parent/login'); 
     } else {
-      // Error message is often generic from Firebase, e.g. email already in use.
       setError('Registration failed. The email might already be in use or there was a server error.');
-      toast({ title: "Registration Failed", description: "Please try again. Email might be in use or password is too weak.", variant: "destructive" });
+      toast({ title: "Registration Failed", description: "Please try again. Email might be in use.", variant: "destructive" });
     }
   };
   
@@ -107,14 +119,13 @@ export default function ParentRegisterPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="gender">Gender</Label>
-              <Select value={gender} onValueChange={(value) => setGender(value as 'male' | 'female' | 'other' | '')} required>
+              <Select value={gender} onValueChange={(value) => setGender(value as 'male' | 'female' | '')} required>
                 <SelectTrigger id="gender" className="bg-background/70">
                   <SelectValue placeholder="Select gender" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="male">Male</SelectItem>
                   <SelectItem value="female">Female</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -129,8 +140,11 @@ export default function ParentRegisterPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="password">Password (min. 6 characters)</Label>
+                <Label htmlFor="password">Password</Label>
                 <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="bg-background/70"/>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Min. 8 chars, with uppercase, lowercase, and a number.
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>

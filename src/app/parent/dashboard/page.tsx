@@ -4,14 +4,14 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2 } from "lucide-react";
+import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianMask, Activity, Cake, Palette, Brain, CookingPot, BookOpen, PersonStanding, Music, Gamepad2, Code2 } from "lucide-react";
 import AddChildModal from "@/components/modals/AddChildModal";
 import AddTaskModal from "@/components/modals/AddTaskModal";
 import AddRewardModal from "@/components/modals/AddRewardModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Child, Task, Reward, UserProfile } from "@/types"; // Added UserProfile to useAuth
+import type { Child, Task, Reward } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -23,10 +23,25 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"; // Removed AlertDialogTrigger as it's implicitly handled by open prop
+} from "@/components/ui/alert-dialog";
+
+const hobbyIcons: Record<string, React.ElementType> = {
+  "运动": Activity,
+  "阅读": BookOpen,
+  "音乐": Music,
+  "舞蹈": PersonStanding,
+  "计算": Brain,
+  "手工": VenetianMask, // Using a generic icon, could be Palette or similar
+  "烘培": CookingPot,
+  "书法": BookOpen, // Placeholder, could be a custom SVG or more specific Lucide icon if available
+  "绘画": Palette,
+  "编程": Code2,
+  "游戏": Gamepad2, // Example if '游戏' was an option
+};
+
 
 export default function ParentDashboardPage() {
-  const { user, userProfile } = useAuth(); // Destructure userProfile from useAuth
+  const { user, userProfile } = useAuth();
   const { toast } = useToast();
 
   const [children, setChildren] = useState<Child[]>([]);
@@ -99,20 +114,19 @@ export default function ParentDashboardPage() {
 
     try {
       if (itemToDelete.type === 'child') {
+        // Delete from parent's subcollection
         await deleteDoc(doc(db, "users", user.uid, "children", itemToDelete.id));
         toast({ title: "Child Record Deleted", description: `${itemToDelete.name}'s record has been removed.` });
 
+        // If child has a main auth account, delete their profile from /users collection
         if (itemToDelete.childAuthUid) {
           const childProfileRef = doc(db, "users", itemToDelete.childAuthUid);
-          // Optional: Check if it exists before attempting delete, though delete is idempotent.
-          // const childProfileSnap = await getDoc(childProfileRef); 
-          // if (childProfileSnap.exists()) {
+          const childProfileSnap = await getDoc(childProfileRef);
+          if (childProfileSnap.exists()) {
              await deleteDoc(childProfileRef);
              toast({ title: "Child Profile Deleted", description: `Main profile for ${itemToDelete.name} also removed.` });
-          // } else {
-          //   toast({ title: "Info", description: `Main profile for ${itemToDelete.name} not found or already deleted.`});
-          // }
-          
+          }
+          // Inform parent about manual Firebase Auth user deletion
            toast({
             title: "Manual Action May Be Required",
             description: `If ${itemToDelete.name} had direct login, their Firebase Auth account needs to be deleted manually from the Firebase console.`,
@@ -130,7 +144,6 @@ export default function ParentDashboardPage() {
       setItemToDelete(null); 
     } catch (error: any) {
       console.error(`Error deleting ${itemToDelete.type} (ID: ${itemToDelete.id}, ChildAuthUID: ${itemToDelete.childAuthUid || 'N/A'}):`, error);
-      // Log details that might be relevant for diagnosing permission issues
       console.error("Details of item being deleted:", JSON.stringify(itemToDelete, null, 2));
       console.error("Current parent Firebase Auth user UID:", user.uid);
       console.error("Current parent user profile (from AuthContext):", JSON.stringify(userProfile, null, 2));
@@ -153,7 +166,7 @@ export default function ParentDashboardPage() {
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the {itemToDelete?.type} named "{itemToDelete?.name}".
-              {itemToDelete?.type === 'child' && " Deleting a child will remove their record and, if applicable, their main profile data. Their Firebase Authentication account (if direct login was enabled) will need to be manually deleted from the Firebase console."}
+              {itemToDelete?.type === 'child' && " Deleting a child will remove their app data. Their Firebase Authentication account (if direct login was enabled) will need to be manually deleted from the Firebase console."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -186,13 +199,29 @@ export default function ParentDashboardPage() {
             {children.length > 0 ? (
               <ul className="space-y-3">
                 {children.map(child => (
-                  <li key={child.id} className="p-3 rounded-md bg-secondary/30 hover:bg-secondary/40 transition-colors">
-                    <div className="flex items-center justify-between">
+                  <li key={child.id || child.authUid} className="p-3 rounded-md bg-secondary/30 hover:bg-secondary/40 transition-colors">
+                    <div className="flex items-start justify-between">
                       <div>
-                        <span className="font-medium">{child.name}</span>
+                        <span className="font-medium block">{child.name}</span>
                         <p className="text-xs text-muted-foreground">{child.email}</p>
+                        <p className="text-xs text-muted-foreground capitalize">
+                          {child.gender}, Age: {child.age}
+                        </p>
+                        {child.hobbies && child.hobbies.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {child.hobbies.map(hobby => {
+                              const IconComponent = hobbyIcons[hobby] || Palette; // Default icon
+                              return (
+                                <Badge variant="outline" key={hobby} className="text-xs py-0.5 px-1.5 bg-background/50">
+                                  <IconComponent className="h-3 w-3 mr-1 opacity-70" />
+                                  {hobby}
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                       <div className="flex items-center gap-2">
+                       <div className="flex flex-col items-end gap-1">
                         <Badge variant="outline">{child.points ?? 0} pts</Badge>
                         <Button 
                             variant="ghost" 
@@ -224,7 +253,7 @@ export default function ParentDashboardPage() {
                              <Copy className="h-4 w-4" />
                            </Button>
                         </div>
-                        <p className="mt-1 text-[11px] text-muted-foreground">Share this with {child.name} for their first login. They should change it afterwards.</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">Share with {child.name} for first login. They should change it.</p>
                       </div>
                     )}
                   </li>
@@ -241,9 +270,10 @@ export default function ParentDashboardPage() {
             <CardTitle className="text-xl font-medium">
               <ListChecks className="inline-block mr-2 h-5 w-5 text-primary" /> Tasks
             </CardTitle>
-            <Button size="sm" variant="outline" onClick={() => setIsAddTaskModalOpen(true)}>
+            <Button size="sm" variant="outline" onClick={() => setIsAddTaskModalOpen(true)} disabled={children.length === 0}>
               <PlusCircle className="mr-2 h-4 w-4" /> Add Task
             </Button>
+            {children.length === 0 && <p className="text-xs text-muted-foreground mt-1">Add a child first to assign tasks.</p>}
           </CardHeader>
           <CardContent>
             {tasks.length > 0 ? (
@@ -253,7 +283,11 @@ export default function ParentDashboardPage() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <span className="font-medium">{task.description}</span>
-                        {task.assignedToName && <p className="text-xs text-muted-foreground">Assigned to: {task.assignedToName}</p>}
+                        {task.assignedToNames && task.assignedToNames.length > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                                Assigned to: {task.assignedToNames.join(', ')}
+                            </p>
+                        )}
                          <p className="text-xs text-muted-foreground capitalize">Status: {task.status}</p>
                       </div>
                       <div className="flex flex-col items-end ml-2">
@@ -326,6 +360,7 @@ export default function ParentDashboardPage() {
         isOpen={isAddTaskModalOpen} 
         onClose={() => setIsAddTaskModalOpen(false)} 
         onTaskAdded={handleDataRefreshNeeded}
+        parentChildren={children} 
       />
       <AddRewardModal 
         isOpen={isAddRewardModalOpen} 
@@ -335,6 +370,3 @@ export default function ParentDashboardPage() {
     </div>
   );
 }
-
-
-    

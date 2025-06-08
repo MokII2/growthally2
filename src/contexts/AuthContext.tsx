@@ -60,7 +60,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (fetchedProfileData) {
           setUserProfile(fetchedProfileData);
         } else {
-           // If no profile data, but firebaseUser exists, ensure userProfile is nullified if it's for a different user
            if (userProfile && userProfile.uid !== firebaseUser.uid) {
              setUserProfile(null);
            }
@@ -74,7 +73,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => unsubscribe();
   }, []);
 
- const signUpParent = async (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId'> & {password: string}): Promise<FirebaseUser | null> => {
+ const signUpParent = async (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId' | 'hobbies'> & {password: string}): Promise<FirebaseUser | null> => {
     setLoading(true);
     const { email, password, name, gender, age, phone } = details;
     if (!email || !password || !name || gender === undefined || age === undefined || !phone) {
@@ -110,7 +109,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      // Profile will be fetched by onAuthStateChanged
       setLoading(false);
       return userCredential.user;
     } catch (error: any) {
@@ -125,13 +123,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const childUser = userCredential.user;
-      // It's crucial to verify this user is indeed a child
       const profile = await fetchUserProfile(childUser.uid);
       if (profile && profile.role === 'child') {
         setLoading(false);
         return childUser;
       } else {
-        // If not a child, sign out this user from the main auth state to prevent unauthorized access
         await signOut(auth);
         throw new Error("Not a valid child account.");
       }
@@ -144,10 +140,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signUpChildAndLinkToParent = async (
     parentAuthUid: string,
-    childDetails: { name: string, email: string }
+    childDetails: { 
+      name: string; 
+      emailPrefix: string; 
+      gender: 'male' | 'female'; 
+      age: number; 
+      hobbies: string[]; 
+    }
   ): Promise<{ userProfile: UserProfile; generatedPassword?: string } | null> => {
     setLoading(true);
     let tempAuthManager: { tempAuth: Auth; cleanup: () => Promise<void> } | null = null;
+    const fullEmail = `${childDetails.emailPrefix}@growthally.com`;
 
     try {
       tempAuthManager = await createTemporaryAuthInstance();
@@ -155,7 +158,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       const generatedPassword = generateRandomPassword(8);
 
-      const childAuthCredential = await createUserWithEmailAndPassword(tempAuth, childDetails.email, generatedPassword);
+      const childAuthCredential = await createUserWithEmailAndPassword(tempAuth, fullEmail, generatedPassword);
       const newChildUser = childAuthCredential.user;
 
       await updateProfile(newChildUser, { displayName: childDetails.name });
@@ -163,28 +166,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const childProfileForUsersCollection: UserProfile = {
         uid: newChildUser.uid,
         role: 'child',
-        email: childDetails.email,
+        email: fullEmail,
         displayName: childDetails.name,
         parentId: parentAuthUid,
         points: 0,
+        gender: childDetails.gender,
+        age: childDetails.age,
+        hobbies: childDetails.hobbies,
       };
-      // Create the child's main profile in /users collection
       await setDoc(doc(db, 'users', newChildUser.uid), childProfileForUsersCollection);
 
-      // Add/Update the child's record in the parent's subcollection
-      const childSubcollectionDocData: Omit<Child, 'id'> = { // Use Omit to ensure all fields of Child (except id) are considered
+      const childSubcollectionDocData: Omit<Child, 'id'> = { 
         name: childDetails.name,
-        email: childDetails.email,
+        email: fullEmail,
         points: 0,
         authUid: newChildUser.uid,
         createdAt: serverTimestamp(),
         initialPassword: generatedPassword,
+        gender: childDetails.gender,
+        age: childDetails.age,
+        hobbies: childDetails.hobbies,
       };
       await addDoc(collection(db, 'users', parentAuthUid, 'children'), childSubcollectionDocData);
 
       console.log(`Child Auth user and profile created for ${childDetails.name}. UID: ${newChildUser.uid}. Initial Password: ${generatedPassword}`);
 
-      await cleanup(); // Clean up the temporary auth instance
+      await cleanup(); 
       setLoading(false);
       return { userProfile: childProfileForUsersCollection, generatedPassword };
 
@@ -194,7 +201,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         await tempAuthManager.cleanup();
       }
       setLoading(false);
-      throw error; // Re-throw the error so the calling component can inspect its code
+      throw error; 
     }
   };
 
@@ -203,8 +210,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const currentRole = userProfile?.role;
     try {
       await signOut(auth);
-      // After sign out, user and userProfile will be set to null by onAuthStateChanged
-      // Redirect based on role before sign-out
       if (currentRole === 'parent') {
         router.push('/parent/login');
       } else if (currentRole === 'child') {
@@ -214,9 +219,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (error) {
       console.error("Error signing out:", error);
-    } finally {
-        // setLoading(false); // onAuthStateChanged will handle loading state
-    }
+    } 
   };
 
   const sendPasswordReset = async (email: string): Promise<boolean> => {
@@ -257,4 +260,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-

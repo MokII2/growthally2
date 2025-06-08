@@ -12,6 +12,7 @@ export interface UserProfile {
   phone?: string; 
   parentId?: string; 
   points?: number; 
+  hobbies?: string[]; // Added for child's main profile
 }
 
 export interface Child { 
@@ -21,14 +22,20 @@ export interface Child {
   points: number;
   authUid?: string; // Firebase Auth UID if child has direct login
   initialPassword?: string; // For parent to see child's first password
+  gender?: 'male' | 'female'; // Added
+  age?: number; // Added
+  hobbies?: string[]; // Added
+  createdAt?: any; // Added for consistency, though might not be strictly used for display yet
 }
 
 export interface Task {
   id: string; 
   description: string;
   points: number;
-  assignedTo?: string; 
-  assignedToName?: string; 
+  // assignedTo?: string; // Old field
+  // assignedToName?: string; // Old field
+  assignedToUids?: string[]; // New: Array of child UIDs
+  assignedToNames?: string[]; // New: Array of child names for display
   status: 'pending' | 'completed' | 'verified';
   parentId: string; 
   createdAt: any; 
@@ -49,14 +56,23 @@ export interface AuthContextType {
   loading: boolean;
   isParent: boolean;
   isChild: boolean;
-  signUpParent: (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId'> & {password: string}) => Promise<FirebaseUser | null>;
+  signUpParent: (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId' | 'hobbies'> & {password: string}) => Promise<FirebaseUser | null>;
   signInParentWithEmail: (email: string, password: string) => Promise<FirebaseUser | null>;
   signInChildWithEmail: (email: string, password: string) => Promise<FirebaseUser | null>; 
   signUpChildAndLinkToParent: (
     parentAuthUid: string, 
-    childDetails: { name: string, email: string }
-  ) => Promise<{ userProfile: UserProfile; generatedPassword?: string } | null>; // Return type updated
+    childDetails: { 
+      name: string; 
+      emailPrefix: string; 
+      gender: 'male' | 'female'; 
+      age: number; 
+      hobbies: string[]; 
+    }
+  ) => Promise<{ userProfile: UserProfile; generatedPassword?: string } | null>;
   signOutUser: () => Promise<void>;
   fetchUserProfile: (uid: string) => Promise<UserProfile | null>;
   sendPasswordReset: (email: string) => Promise<boolean>;
 }
+
+export const HOBBY_OPTIONS = ["运动", "阅读", "音乐", "舞蹈", "计算", "手工", "烘培", "书法", "绘画", "编程"] as const;
+export type Hobby = typeof HOBBY_OPTIONS[number];

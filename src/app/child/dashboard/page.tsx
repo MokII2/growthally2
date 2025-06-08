@@ -4,10 +4,10 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Star, Trophy, AlertTriangle } from "lucide-react";
+import { CheckCircle2, Star, Trophy, AlertTriangle, Clock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Task, Reward } from "@/types";
-import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, writeBatch } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 
@@ -54,7 +54,7 @@ export default function ChildDashboardPage() {
     const userProfileRef = doc(db, "users", user.uid);
     const unsubscribeUserProfile = onSnapshot(userProfileRef, (docSnap) => {
       if (docSnap.exists()) {
-        const updatedProfile = docSnap.data() as any;
+        const updatedProfile = docSnap.data() as any; // Cast to any for userProfile updates
         setCurrentPoints(updatedProfile.points ?? 0);
       }
     });
@@ -70,8 +70,6 @@ export default function ChildDashboardPage() {
     if (!user || !userProfile) return;
     
     const taskRef = doc(db, "tasks", taskId);
-    const userProfileRef = doc(db, "users", user.uid);
-
     try {
       const taskSnap = await getDoc(taskRef);
       if (!taskSnap.exists()) {
@@ -85,18 +83,12 @@ export default function ChildDashboardPage() {
         return;
       }
 
-      const batch = writeBatch(db);
-      batch.update(taskRef, { status: "verified" });
+      await updateDoc(taskRef, { status: "completed" }); // Child sets to 'completed'
 
-      const newPoints = (userProfile.points || 0) + taskData.points;
-      batch.update(userProfileRef, { points: newPoints });
-      
-      await batch.commit();
-
-      toast({ title: "Task Completed!", description: `"${taskData.description}" marked as verified and ${taskData.points} points awarded.` });
+      toast({ title: "Task Submitted!", description: `"${taskData.description}" has been submitted for parent verification.` });
     } catch (error) {
-      console.error("Error marking task done and awarding points:", error);
-      toast({ title: "Error", description: "Could not complete task and award points.", variant: "destructive" });
+      console.error("Error submitting task for verification:", error);
+      toast({ title: "Error", description: "Could not submit task.", variant: "destructive" });
     }
   };
 
@@ -118,7 +110,6 @@ export default function ChildDashboardPage() {
   };
 
   const pendingTasks = tasks.filter(task => task.status === 'pending');
-  // Tasks with status 'completed' will no longer appear here if children set them directly to 'verified'
   const completedTasksAwaitingVerification = tasks.filter(task => task.status === 'completed'); 
   const verifiedTasks = tasks.filter(task => task.status === 'verified');
 
@@ -169,8 +160,8 @@ export default function ChildDashboardPage() {
             {completedTasksAwaitingVerification.length > 0 && (
                  <div className="mt-4">
                     <h3 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center">
-                        <AlertTriangle className="h-4 w-4 mr-1.5 text-yellow-500" />
-                        Completed Tasks (Awaiting Parent Verification):
+                        <Clock className="h-4 w-4 mr-1.5 text-yellow-500" /> {/* Changed Icon */}
+                        Tasks Submitted (Awaiting Parent Verification):
                     </h3>
                      <ul className="space-y-2 opacity-70">
                         {completedTasksAwaitingVerification.map(task => (

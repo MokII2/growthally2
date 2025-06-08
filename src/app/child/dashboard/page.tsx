@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, Star, Trophy, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Task, Reward } from "@/types";
-import { collection, query, where, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, getDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 
@@ -28,12 +28,10 @@ export default function ChildDashboardPage() {
   useEffect(() => {
     if (!user || !userProfile || !userProfile.parentId) return;
 
-    // Fetch tasks assigned to this child
-    // A task is for this child if their user.uid is in the task's assignedToUids array
     const tasksQuery = query(
       collection(db, "tasks"),
-      where("parentId", "==", userProfile.parentId), // Tasks created by their parent
-      where("assignedToUids", "array-contains", user.uid) // Task is assigned to this child
+      where("parentId", "==", userProfile.parentId),
+      where("assignedToUids", "array-contains", user.uid)
     );
 
     const unsubscribeTasks = onSnapshot(tasksQuery, (snapshot) => {
@@ -44,7 +42,6 @@ export default function ChildDashboardPage() {
       toast({ title: "Error", description: "Could not fetch tasks.", variant: "destructive" });
     });
 
-    // Fetch rewards available from this child's parent
     const rewardsQuery = query(collection(db, "rewards"), where("parentId", "==", userProfile.parentId));
     const unsubscribeRewards = onSnapshot(rewardsQuery, (snapshot) => {
       const fetchedRewards: Reward[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Reward));
@@ -54,11 +51,10 @@ export default function ChildDashboardPage() {
       toast({ title: "Error", description: "Could not fetch rewards.", variant: "destructive" });
     });
 
-    // Listen for changes to the child's own points directly
     const userProfileRef = doc(db, "users", user.uid);
     const unsubscribeUserProfile = onSnapshot(userProfileRef, (docSnap) => {
       if (docSnap.exists()) {
-        const updatedProfile = docSnap.data() as any; // Cast to any or a more specific type if needed
+        const updatedProfile = docSnap.data() as any;
         setCurrentPoints(updatedProfile.points ?? 0);
       }
     });
@@ -71,15 +67,36 @@ export default function ChildDashboardPage() {
   }, [user, userProfile, toast]);
 
   const handleMarkTaskDone = async (taskId: string) => {
-    if (!user) return;
+    if (!user || !userProfile) return;
+    
+    const taskRef = doc(db, "tasks", taskId);
+    const userProfileRef = doc(db, "users", user.uid);
+
     try {
-      const taskRef = doc(db, "tasks", taskId);
-      await updateDoc(taskRef, { status: "completed" });
-      // Points are awarded by parent upon verification, not here.
-      toast({ title: "Task Submitted!", description: "Your task has been marked as completed and is awaiting parent verification." });
+      const taskSnap = await getDoc(taskRef);
+      if (!taskSnap.exists()) {
+        toast({ title: "Error", description: "Task not found.", variant: "destructive" });
+        return;
+      }
+      const taskData = taskSnap.data() as Task;
+
+      if (taskData.status !== 'pending') {
+        toast({ title: "Info", description: "This task is no longer pending.", variant: "default" });
+        return;
+      }
+
+      const batch = writeBatch(db);
+      batch.update(taskRef, { status: "verified" });
+
+      const newPoints = (userProfile.points || 0) + taskData.points;
+      batch.update(userProfileRef, { points: newPoints });
+      
+      await batch.commit();
+
+      toast({ title: "Task Completed!", description: `"${taskData.description}" marked as verified and ${taskData.points} points awarded.` });
     } catch (error) {
-      console.error("Error marking task done:", error);
-      toast({ title: "Error", description: "Could not submit task.", variant: "destructive" });
+      console.error("Error marking task done and awarding points:", error);
+      toast({ title: "Error", description: "Could not complete task and award points.", variant: "destructive" });
     }
   };
 
@@ -89,28 +106,11 @@ export default function ChildDashboardPage() {
       return;
     }
     try {
-      // This is a simplified claim process.
-      // In a real app, you might create a "claimed_rewards" record or send a notification to the parent.
-      // For now, we just deduct points.
       const userProfileRef = doc(db, "users", user.uid);
       await updateDoc(userProfileRef, {
         points: currentPoints - reward.pointsCost
       });
-      // No need to update currentPoints state directly, onSnapshot will do it.
       toast({ title: "Reward Claimed!", description: `You've claimed "${reward.description}". Your parent will be notified.` });
-
-      // Placeholder: Notify parent (e.g., create a notification document or update a field)
-      // For example, one might add to a subcollection under the parent's user document:
-      // await addDoc(collection(db, "users", userProfile.parentId!, "notifications"), {
-      //   type: "reward_claimed",
-      //   childName: userProfile.displayName,
-      //   childId: user.uid,
-      //   rewardDescription: reward.description,
-      //   pointsCost: reward.pointsCost,
-      //   timestamp: serverTimestamp(),
-      //   read: false,
-      // });
-
     } catch (error) {
       console.error("Error claiming reward:", error);
       toast({ title: "Error Claiming Reward", description: "Could not claim reward.", variant: "destructive" });
@@ -118,8 +118,9 @@ export default function ChildDashboardPage() {
   };
 
   const pendingTasks = tasks.filter(task => task.status === 'pending');
-  const completedTasksAwaitingVerification = tasks.filter(task => task.status === 'completed');
-  const verifiedTasks = tasks.filter(task => task.status === 'verified'); // Assuming parent verifies
+  // Tasks with status 'completed' will no longer appear here if children set them directly to 'verified'
+  const completedTasksAwaitingVerification = tasks.filter(task => task.status === 'completed'); 
+  const verifiedTasks = tasks.filter(task => task.status === 'verified');
 
   return (
     <div className="space-y-8">
@@ -140,7 +141,6 @@ export default function ChildDashboardPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Assigned Tasks */}
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="text-xl font-medium">
@@ -199,7 +199,6 @@ export default function ChildDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Available Rewards */}
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="text-xl font-medium">

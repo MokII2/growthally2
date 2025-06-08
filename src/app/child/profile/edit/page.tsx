@@ -40,7 +40,7 @@ export default function ChildEditProfilePage() {
     defaultValues: {
       displayName: '',
       gender: undefined,
-      age: undefined,
+      age: '' as any, // Initialize with empty string
       hobbies: [],
     },
   });
@@ -50,7 +50,7 @@ export default function ChildEditProfilePage() {
       reset({
         displayName: userProfile.displayName || '',
         gender: userProfile.gender as 'male' | 'female' || undefined,
-        age: userProfile.age || undefined,
+        age: userProfile.age !== undefined && userProfile.age !== null ? userProfile.age : ('' as any), // Use empty string if age is null/undefined
         hobbies: userProfile.hobbies || [],
       });
     }
@@ -137,7 +137,10 @@ export default function ChildEditProfilePage() {
                 <Controller
                   name="age"
                   control={control}
-                  render={({ field }) => <Input id="age" type="number" {...field} />}
+                  render={({ field }) => <Input id="age" type="number" {...field} 
+                    // Ensure value is not undefined for the input
+                    value={field.value === undefined || field.value === null ? '' : field.value}
+                  />}
                 />
                 {errors.age && <p className="text-sm text-destructive">{errors.age.message}</p>}
               </div>

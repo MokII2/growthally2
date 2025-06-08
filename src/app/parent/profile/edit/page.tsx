@@ -38,7 +38,7 @@ export default function ParentEditProfilePage() {
     defaultValues: {
       name: '',
       gender: '',
-      age: undefined,
+      age: '' as any, // Initialize with empty string
       phone: '',
     },
   });
@@ -48,7 +48,7 @@ export default function ParentEditProfilePage() {
       reset({
         name: userProfile.name || '',
         gender: userProfile.gender || '',
-        age: userProfile.age || undefined,
+        age: userProfile.age !== undefined && userProfile.age !== null ? userProfile.age : ('' as any), // Use empty string if age is null/undefined
         phone: userProfile.phone || '',
       });
     }
@@ -136,7 +136,10 @@ export default function ParentEditProfilePage() {
                 <Controller
                   name="age"
                   control={control}
-                  render={({ field }) => <Input id="age" type="number" {...field} />}
+                  render={({ field }) => <Input id="age" type="number" {...field} 
+                    // Ensure value is not undefined for the input
+                    value={field.value === undefined || field.value === null ? '' : field.value} 
+                  />}
                 />
                 {errors.age && <p className="text-sm text-destructive">{errors.age.message}</p>}
               </div>

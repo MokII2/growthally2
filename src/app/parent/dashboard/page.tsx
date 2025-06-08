@@ -4,12 +4,12 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianMask, Activity, Cake, Palette, Brain, CookingPot, BookOpen, PersonStanding, Music, Gamepad2, Code2 } from "lucide-react";
+import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianMask, Activity, Cake, Palette, Brain, CookingPot, BookOpen, PersonStanding, Music, Gamepad2, Code2, CheckSquare, BellRing } from "lucide-react";
 import AddChildModal from "@/components/modals/AddChildModal";
 import AddTaskModal from "@/components/modals/AddTaskModal";
 import AddRewardModal from "@/components/modals/AddRewardModal";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, getDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, getDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Child, Task, Reward } from "@/types";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +24,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Separator } from "@/components/ui/separator";
+
 
 const hobbyIcons: Record<string, React.ElementType> = {
   "运动": Activity,
@@ -31,12 +33,12 @@ const hobbyIcons: Record<string, React.ElementType> = {
   "音乐": Music,
   "舞蹈": PersonStanding,
   "计算": Brain,
-  "手工": VenetianMask, // Using a generic icon, could be Palette or similar
+  "手工": VenetianMask, 
   "烘培": CookingPot,
-  "书法": BookOpen, // Placeholder, could be a custom SVG or more specific Lucide icon if available
+  "书法": BookOpen, 
   "绘画": Palette,
   "编程": Code2,
-  "游戏": Gamepad2, // Example if '游戏' was an option
+  "游戏": Gamepad2, 
 };
 
 
@@ -54,6 +56,8 @@ export default function ParentDashboardPage() {
 
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; type: 'child' | 'task' | 'reward'; childAuthUid?: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isVerifyingTask, setIsVerifyingTask] = useState<string | null>(null);
+
 
   useEffect(() => {
     if (!user) return;
@@ -114,11 +118,9 @@ export default function ParentDashboardPage() {
 
     try {
       if (itemToDelete.type === 'child') {
-        // Delete from parent's subcollection
         await deleteDoc(doc(db, "users", user.uid, "children", itemToDelete.id));
         toast({ title: "Child Record Deleted", description: `${itemToDelete.name}'s record has been removed.` });
 
-        // If child has a main auth account, delete their profile from /users collection
         if (itemToDelete.childAuthUid) {
           const childProfileRef = doc(db, "users", itemToDelete.childAuthUid);
           const childProfileSnap = await getDoc(childProfileRef);
@@ -126,7 +128,6 @@ export default function ParentDashboardPage() {
              await deleteDoc(childProfileRef);
              toast({ title: "Child Profile Deleted", description: `Main profile for ${itemToDelete.name} also removed.` });
           }
-          // Inform parent about manual Firebase Auth user deletion
            toast({
             title: "Manual Action May Be Required",
             description: `If ${itemToDelete.name} had direct login, their Firebase Auth account needs to be deleted manually from the Firebase console.`,
@@ -158,6 +159,58 @@ export default function ParentDashboardPage() {
     }
   };
 
+  const handleVerifyTask = async (task: Task) => {
+    if (!user || !task.assignedToUids || task.assignedToUids.length === 0) {
+      toast({ title: "Error", description: "Task details incomplete or no children assigned.", variant: "destructive" });
+      return;
+    }
+    setIsVerifyingTask(task.id);
+    try {
+      const batch = writeBatch(db);
+
+      const taskRef = doc(db, "tasks", task.id);
+      batch.update(taskRef, { status: "verified" });
+
+      for (const childAuthUid of task.assignedToUids) {
+        const childProfileRef = doc(db, "users", childAuthUid);
+        const childProfileSnap = await getDoc(childProfileRef);
+        if (childProfileSnap.exists()) {
+          const currentPoints = childProfileSnap.data().points || 0;
+          batch.update(childProfileRef, { points: currentPoints + task.points });
+        } else {
+          console.warn(`Child profile ${childAuthUid} not found for point update.`);
+        }
+
+        const childSubcollectionDoc = children.find(c => c.authUid === childAuthUid);
+        if (childSubcollectionDoc && childSubcollectionDoc.id) {
+          const childSubDocRef = doc(db, "users", user.uid, "children", childSubcollectionDoc.id);
+          const childSubDocSnap = await getDoc(childSubDocRef);
+          if (childSubDocSnap.exists()) {
+              const currentSubPoints = childSubDocSnap.data().points || 0;
+              batch.update(childSubDocRef, { points: currentSubPoints + task.points });
+          } else {
+              console.warn(`Child subcollection record for ${childAuthUid} (docId: ${childSubcollectionDoc.id}) not found for point update.`);
+          }
+        } else {
+            console.warn(`Child subcollection record mapping not found for authUid ${childAuthUid}. This might happen if the child was recently added and the 'children' state hasn't updated yet, or if the child's subcollection document ID is missing.`);
+        }
+      }
+
+      await batch.commit();
+      toast({ title: "Task Verified!", description: `"${task.description}" has been verified and points awarded.` });
+    } catch (error: any) {
+      console.error("Error verifying task:", error);
+      toast({ title: "Verification Failed", description: error.message || "Could not verify task.", variant: "destructive" });
+    } finally {
+      setIsVerifyingTask(null);
+    }
+  };
+
+  const tasksAwaitingVerification = tasks.filter(task => task.status === 'completed');
+  const pendingTasks = tasks.filter(task => task.status === 'pending');
+  const verifiedTasks = tasks.filter(task => task.status === 'verified');
+
+
   return (
     <div className="space-y-8">
       <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
@@ -185,6 +238,45 @@ export default function ParentDashboardPage() {
         </div>
       </div>
 
+      {/* Tasks Awaiting Verification */}
+      {tasksAwaitingVerification.length > 0 && (
+        <Card className="shadow-lg border-primary/50">
+          <CardHeader>
+            <CardTitle className="text-xl font-medium text-primary flex items-center">
+              <BellRing className="inline-block mr-2 h-5 w-5" /> Tasks Awaiting Your Verification
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-3">
+              {tasksAwaitingVerification.map(task => (
+                <li key={task.id} className="p-3 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <div className="flex-1">
+                      <span className="font-medium">{task.description}</span>
+                      {task.assignedToNames && task.assignedToNames.length > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                              Submitted by: {task.assignedToNames.join(', ')}
+                          </p>
+                      )}
+                       <p className="text-xs text-primary">{task.points} pts</p>
+                    </div>
+                    <Button 
+                      size="sm" 
+                      onClick={() => handleVerifyTask(task)}
+                      disabled={isVerifyingTask === task.id}
+                    >
+                      {isVerifyingTask === task.id ? "Verifying..." : "Verify & Award Points"}
+                      <CheckSquare className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -210,7 +302,7 @@ export default function ParentDashboardPage() {
                         {child.hobbies && child.hobbies.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
                             {child.hobbies.map(hobby => {
-                              const IconComponent = hobbyIcons[hobby] || Palette; // Default icon
+                              const IconComponent = hobbyIcons[hobby] || Palette; 
                               return (
                                 <Badge variant="outline" key={hobby} className="text-xs py-0.5 px-1.5 bg-background/50">
                                   <IconComponent className="h-3 w-3 mr-1 opacity-70" />
@@ -268,7 +360,7 @@ export default function ParentDashboardPage() {
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xl font-medium">
-              <ListChecks className="inline-block mr-2 h-5 w-5 text-primary" /> Tasks
+              <ListChecks className="inline-block mr-2 h-5 w-5 text-primary" /> Tasks Overview
             </CardTitle>
             <Button size="sm" variant="outline" onClick={() => setIsAddTaskModalOpen(true)} disabled={children.length === 0}>
               <PlusCircle className="mr-2 h-4 w-4" /> Add Task
@@ -276,38 +368,84 @@ export default function ParentDashboardPage() {
             {children.length === 0 && <p className="text-xs text-muted-foreground mt-1">Add a child first to assign tasks.</p>}
           </CardHeader>
           <CardContent>
-            {tasks.length > 0 ? (
-              <ul className="space-y-2">
-                {tasks.map(task => (
-                  <li key={task.id} className="p-3 rounded-md bg-secondary/30 hover:bg-secondary/40 transition-colors">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <span className="font-medium">{task.description}</span>
-                        {task.assignedToNames && task.assignedToNames.length > 0 && (
-                            <p className="text-xs text-muted-foreground">
-                                Assigned to: {task.assignedToNames.join(', ')}
-                            </p>
-                        )}
-                         <p className="text-xs text-muted-foreground capitalize">Status: {task.status}</p>
-                      </div>
-                      <div className="flex flex-col items-end ml-2">
-                        <span className="text-sm text-primary whitespace-nowrap">{task.points} pts</span>
-                        <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-7 w-7 mt-1 text-muted-foreground hover:text-destructive"
-                            onClick={() => handleDeleteConfirmation(task.id, task.description, 'task')}
-                            title={`Delete task "${task.description}"`}
-                            >
-                            <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+            {tasks.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No tasks created yet.</p>
             ) : (
-              <p className="text-sm text-muted-foreground">No tasks created yet.</p>
+              <div className="space-y-4">
+                {pendingTasks.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-muted-foreground mb-2">Pending Tasks ({pendingTasks.length}):</h3>
+                    <ul className="space-y-2">
+                      {pendingTasks.map(task => (
+                        <li key={task.id} className="p-3 rounded-md bg-secondary/30 hover:bg-secondary/40 transition-colors">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <span className="font-medium">{task.description}</span>
+                              {task.assignedToNames && task.assignedToNames.length > 0 && (
+                                  <p className="text-xs text-muted-foreground">
+                                      Assigned to: {task.assignedToNames.join(', ')}
+                                  </p>
+                              )}
+                            </div>
+                            <div className="flex flex-col items-end ml-2">
+                              <span className="text-sm text-primary whitespace-nowrap">{task.points} pts</span>
+                              <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-7 w-7 mt-1 text-muted-foreground hover:text-destructive"
+                                  onClick={() => handleDeleteConfirmation(task.id, task.description, 'task')}
+                                  title={`Delete task "${task.description}"`}
+                                  >
+                                  <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {verifiedTasks.length > 0 && (
+                  <div>
+                    <Separator className="my-3" />
+                    <h3 className="text-sm font-semibold text-muted-foreground mb-2">Verified & Awarded Tasks ({verifiedTasks.length}):</h3>
+                    <ul className="space-y-2 opacity-70">
+                      {verifiedTasks.map(task => (
+                        <li key={task.id} className="p-2 rounded-md bg-green-100 dark:bg-green-900/30">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <span className="font-medium line-through">{task.description}</span>
+                              {task.assignedToNames && task.assignedToNames.length > 0 && (
+                                  <p className="text-xs text-green-700 dark:text-green-300">
+                                      Completed by: {task.assignedToNames.join(', ')}
+                                  </p>
+                              )}
+                            </div>
+                            <div className="flex flex-col items-end ml-2">
+                                <span className="text-xs text-green-600 dark:text-green-400">Points Awarded!</span>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-7 w-7 mt-1 text-muted-foreground hover:text-destructive"
+                                  onClick={() => handleDeleteConfirmation(task.id, task.description, 'task')}
+                                  title={`Delete task "${task.description}"`}
+                                  >
+                                  <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                
+                {pendingTasks.length === 0 && verifiedTasks.length === 0 && tasksAwaitingVerification.length === 0 && (
+                     <p className="text-sm text-muted-foreground">All tasks are either awaiting verification or none have been created.</p>
+                )}
+
+              </div>
             )}
           </CardContent>
         </Card>
@@ -370,3 +508,4 @@ export default function ParentDashboardPage() {
     </div>
   );
 }
+

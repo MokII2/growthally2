@@ -71,7 +71,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, []); // Removed userProfile from dependency array to prevent re-fetches on local profile changes
 
  const signUpParent = async (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId' | 'hobbies'> & {password: string}): Promise<FirebaseUser | null> => {
     setLoading(true);
@@ -128,8 +128,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
         return childUser;
       } else {
-        await signOut(auth);
-        throw new Error("Not a valid child account.");
+        await signOut(auth); // Sign out if not a valid child
+        setLoading(false);
+        console.error("Attempted login for non-child account or profile missing.");
+        return null; // Return null to indicate failure
       }
     } catch (error: any) {
       console.error("Error signing in child:", error.message, error.code);
@@ -140,14 +142,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signUpChildAndLinkToParent = async (
     parentAuthUid: string,
-    childDetails: { 
-      name: string; 
-      emailPrefix: string; 
-      gender: 'male' | 'female'; 
-      age: number; 
-      hobbies: string[]; 
+    childDetails: {
+      name: string;
+      emailPrefix: string;
+      gender: 'male' | 'female';
+      age: number;
+      hobbies: string[];
     }
-  ): Promise<{ userProfile: UserProfile; generatedPassword?: string } | null> => {
+  ): Promise<{ userProfile?: UserProfile; generatedPassword?: string; error?: { code?: string; message?: string } }> => {
     setLoading(true);
     let tempAuthManager: { tempAuth: Auth; cleanup: () => Promise<void> } | null = null;
     const fullEmail = `${childDetails.emailPrefix}@growthally.com`;
@@ -176,7 +178,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
       await setDoc(doc(db, 'users', newChildUser.uid), childProfileForUsersCollection);
 
-      const childSubcollectionDocData: Omit<Child, 'id'> = { 
+      const childSubcollectionDocData: Omit<Child, 'id'> = {
         name: childDetails.name,
         email: fullEmail,
         points: 0,
@@ -191,7 +193,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       console.log(`Child Auth user and profile created for ${childDetails.name}. UID: ${newChildUser.uid}. Initial Password: ${generatedPassword}`);
 
-      await cleanup(); 
+      await cleanup();
       setLoading(false);
       return { userProfile: childProfileForUsersCollection, generatedPassword };
 
@@ -201,7 +203,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         await tempAuthManager.cleanup();
       }
       setLoading(false);
-      throw error; 
+      // Instead of throwing, return an error object
+      return { error: { code: error.code, message: error.message } };
     }
   };
 
@@ -210,6 +213,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const currentRole = userProfile?.role;
     try {
       await signOut(auth);
+      // Clear local state immediately
+      setUser(null);
+      setUserProfile(null);
       if (currentRole === 'parent') {
         router.push('/parent/login');
       } else if (currentRole === 'child') {
@@ -219,7 +225,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (error) {
       console.error("Error signing out:", error);
-    } 
+    } finally {
+        setLoading(false); // Ensure loading is set to false even if navigation hasn't completed
+    }
   };
 
   const sendPasswordReset = async (email: string): Promise<boolean> => {

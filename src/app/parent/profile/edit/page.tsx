@@ -20,7 +20,7 @@ import { ArrowLeft } from 'lucide-react';
 
 const parentProfileSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters.').max(50),
-  gender: z.enum(['male', 'female', ''], { required_error: 'Gender is required.' }),
+  gender: z.enum(['male', 'female', 'unspecified'], { required_error: 'Gender is required.' }),
   age: z.coerce.number().min(18, 'Age must be 18 or older.'),
   phone: z.string().min(5, 'Phone number seems too short.').max(20, 'Phone number seems too long.'),
 });
@@ -37,18 +37,27 @@ export default function ParentEditProfilePage() {
     resolver: zodResolver(parentProfileSchema),
     defaultValues: {
       name: '',
-      gender: '',
-      age: '' as any, // Initialize with empty string
+      gender: undefined, // Use undefined to allow placeholder to show
+      age: '' as any, 
       phone: '',
     },
   });
 
   useEffect(() => {
     if (userProfile) {
+      let formGender: 'male' | 'female' | 'unspecified' | undefined;
+      if (userProfile.gender === 'male' || userProfile.gender === 'female' || userProfile.gender === 'unspecified') {
+        formGender = userProfile.gender;
+      } else if (userProfile.gender === '') { // Map old empty string from DB
+        formGender = 'unspecified';
+      } else {
+        formGender = undefined; // If no gender or invalid, placeholder will show
+      }
+
       reset({
         name: userProfile.name || '',
-        gender: userProfile.gender || '',
-        age: userProfile.age !== undefined && userProfile.age !== null ? userProfile.age : ('' as any), // Use empty string if age is null/undefined
+        gender: formGender,
+        age: userProfile.age !== undefined && userProfile.age !== null ? userProfile.age : ('' as any),
         phone: userProfile.phone || '',
       });
     }
@@ -69,7 +78,7 @@ export default function ParentEditProfilePage() {
         phone: data.phone,
       };
       await updateDoc(userDocRef, updateData);
-      await refreshUserProfile(); // Refresh context
+      await refreshUserProfile(); 
       toast({ title: 'Profile Updated', description: 'Your profile has been successfully updated.' });
       router.push('/parent/dashboard');
     } catch (error) {
@@ -117,14 +126,14 @@ export default function ParentEditProfilePage() {
                   name="gender"
                   control={control}
                   render={({ field }) => (
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || undefined}>
                       <SelectTrigger id="gender">
                         <SelectValue placeholder="Select gender" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="male">Male</SelectItem>
                         <SelectItem value="female">Female</SelectItem>
-                        <SelectItem value="">Prefer not to say</SelectItem>
+                        <SelectItem value="unspecified">Prefer not to say</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -137,7 +146,6 @@ export default function ParentEditProfilePage() {
                   name="age"
                   control={control}
                   render={({ field }) => <Input id="age" type="number" {...field} 
-                    // Ensure value is not undefined for the input
                     value={field.value === undefined || field.value === null ? '' : field.value} 
                   />}
                 />

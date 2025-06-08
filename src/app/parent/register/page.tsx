@@ -24,7 +24,7 @@ export default function ParentRegisterPage() {
   const { toast } = useToast();
 
   const [name, setName] = useState('');
-  const [gender, setGender] = useState<'male' | 'female' | ''>('');
+  const [gender, setGender] = useState<'male' | 'female' | 'unspecified' | undefined>(undefined);
   const [age, setAge] = useState<number | ''>('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -42,7 +42,7 @@ export default function ParentRegisterPage() {
     event.preventDefault();
     setError('');
 
-    if (!email || !name || !gender || age === '' || !phone || !password || !confirmPassword) {
+    if (!email || !name || gender === undefined || age === '' || !phone || !password || !confirmPassword) {
         setError('Please fill in all required fields.');
         toast({ title: "Registration Failed", description: "Please fill in all required fields.", variant: "destructive" });
         return;
@@ -68,7 +68,7 @@ export default function ParentRegisterPage() {
       return;
     }
 
-    const parentDetails: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId' | 'hobbies'> & {password: string} = {
+    const parentDetails = {
       name,
       gender,
       age: Number(age),
@@ -119,13 +119,14 @@ export default function ParentRegisterPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="gender">Gender</Label>
-              <Select value={gender} onValueChange={(value) => setGender(value as 'male' | 'female' | '')} required>
+              <Select value={gender} onValueChange={(value) => setGender(value as 'male' | 'female' | 'unspecified')} >
                 <SelectTrigger id="gender" className="bg-background/70">
                   <SelectValue placeholder="Select gender" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="male">Male</SelectItem>
                   <SelectItem value="female">Female</SelectItem>
+                  <SelectItem value="unspecified">Prefer not to say</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -7,7 +7,7 @@ export interface UserProfile {
   email?: string;
   displayName?: string;
   name?: string;
-  gender?: 'male' | 'female' | ''; // Parent gender can be empty
+  gender?: 'male' | 'female' | 'unspecified'; // Changed '' to 'unspecified'
   age?: number;
   phone?: string;
   parentId?: string;
@@ -54,7 +54,7 @@ export interface AuthContextType {
   loading: boolean;
   isParent: boolean;
   isChild: boolean;
-  signUpParent: (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId' | 'hobbies'> & {password: string}) => Promise<FirebaseUser | null>;
+  signUpParent: (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId' | 'hobbies' | 'gender'> & { password: string; gender: 'male' | 'female' | 'unspecified' | undefined }) => Promise<FirebaseUser | null>;
   signInParentWithEmail: (email: string, password: string) => Promise<FirebaseUser | null>;
   signInChildWithEmail: (email: string, password: string) => Promise<FirebaseUser | null>;
   signUpChildAndLinkToParent: (
@@ -75,3 +75,4 @@ export interface AuthContextType {
 
 export const HOBBY_OPTIONS = ["运动", "阅读", "音乐", "舞蹈", "计算", "手工", "烘培", "书法", "绘画", "编程"] as const;
 export type Hobby = typeof HOBBY_OPTIONS[number];
+

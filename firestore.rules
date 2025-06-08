@@ -10,8 +10,6 @@ service cloud.firestore {
     }
 
     function getUserData(userId) {
-      // It's good practice to check if the document exists before accessing .data
-      // However, in rules, get().data will be null if doc doesn't exist, which is often handled by subsequent checks.
       return get(/databases/$(database)/documents/users/$(userId)).data;
     }
 
@@ -26,15 +24,13 @@ service cloud.firestore {
 
     function isChild(userId) {
       let userData = getUserData(userId);
-      // Ensure userData and parentId are not null before proceeding
       return isUserRole(userId, 'child') && userData != null && userData.parentId != null;
     }
 
     function getChildsParentId(childUserId) {
       let userData = getUserData(childUserId);
-      // This function should only be called if isChild(childUserId) is known to be true
-      // or userData null check should be here too for safety if called independently.
-      return userData.parentId;
+      // Ensure userData and parentId are not null before returning
+      return userData != null && userData.parentId != null ? userData.parentId : null;
     }
 
     // USERS collection (Parent profiles, and Child main profiles)
@@ -46,14 +42,14 @@ service cloud.firestore {
                        request.resource.data.role == 'parent' &&
                        request.resource.data.email == request.auth.token.email &&
                        request.resource.data.name is string && request.resource.data.name.size() > 0 &&
-                       request.resource.data.gender is string && (request.resource.data.gender == 'male' || request.resource.data.gender == 'female') &&
+                       request.resource.data.gender is string && (request.resource.data.gender == 'male' || request.resource.data.gender == 'female') && // Corrected parent gender
                        request.resource.data.age is number && request.resource.data.age >= 18 &&
                        request.resource.data.phone is string && request.resource.data.phone.size() > 0 &&
                        !exists(/databases/$(database)/documents/users/$(userId));
 
       // Child Profile Creation (by parent)
       allow create: if isAuthenticated() && isParent(request.auth.uid) &&
-                       request.resource.data.uid == userId && // userId is the child's new auth UID
+                       request.resource.data.uid == userId &&
                        request.resource.data.role == 'child' &&
                        request.resource.data.parentId == request.auth.uid &&
                        request.resource.data.email is string && request.resource.data.email.matches("^[a-zA-Z0-9._-]+@growthally\\.com$") &&
@@ -66,39 +62,54 @@ service cloud.firestore {
 
       allow read: if isAuthenticated() && request.auth.uid == userId;
 
-      allow update: if (
-                    // Parent can update their own profile (specific fields)
-                    (isAuthenticated() && request.auth.uid == userId && isParent(request.auth.uid) &&
-                       request.resource.data.uid == resource.data.uid && // Cannot change uid
-                       request.resource.data.role == resource.data.role && // Cannot change role
-                       request.resource.data.email == resource.data.email // Cannot change email via this update
-                       // Add other specific updatable fields by parent for their own profile, e.g., name, phone, age, gender
-                       // Example: (!('name' in request.resource.data.keys()) || request.resource.data.name is string)
-                    ) ||
-                    // Child can update their own profile (specific fields, cannot change points)
-                    (isAuthenticated() && request.auth.uid == userId && isChild(request.auth.uid) &&
-                       request.resource.data.uid == resource.data.uid &&
-                       request.resource.data.role == resource.data.role &&
-                       request.resource.data.parentId == resource.data.parentId &&
-                       request.resource.data.email == resource.data.email &&
-                       request.resource.data.points == resource.data.points // Child cannot change own points
-                       // Add other specific updatable fields by child, e.g., displayName, hobbies
-                    ) ||
-                    // Parent can update ONLY the points of their child (e.g., when verifying tasks)
-                    (isAuthenticated() && isParent(request.auth.uid) &&
-                       isChild(userId) && getChildsParentId(userId) == request.auth.uid && // Target is their child
-                       request.resource.data.keys().hasOnly(['points']) && // Parent is ONLY sending 'points'
-                       request.resource.data.points is number // New points value is a number
-                    )
-                  );
+      allow update: if
+        // Scenario 1: User updating their own profile
+        (isAuthenticated() && request.auth.uid == userId &&
+          // Common immutable fields for self-update
+          request.resource.data.uid == resource.data.uid &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.email == resource.data.email && // Email change usually needs re-auth flow, so treat as immutable here
+          (
+            // Parent self-update specific conditions (e.g., can update name, phone, age, gender)
+            (isParent(request.auth.uid) &&
+              request.resource.data.parentId == null && // Parents don't have parentId
+              // list specific fields parent can change for themselves
+              request.resource.data.keys().hasAny(['name', 'phone', 'age', 'gender', 'points', 'hobbies', 'displayName']) // Adjust as needed
+            ) ||
+            // Child self-update specific conditions (e.g., can update displayName, maybe hobbies, but not points or parentId)
+            (isChild(request.auth.uid) &&
+              request.resource.data.parentId == resource.data.parentId && // child cannot change their parent
+              request.resource.data.points == resource.data.points && // child cannot change their own points
+              // list specific fields child can change for themselves
+              request.resource.data.keys().hasAny(['displayName', 'hobbies', 'name', 'phone', 'age', 'gender', 'points']) // Adjust as needed
+            )
+          )
+        ) ||
+        // Scenario 2: Parent updating ONLY the points of their child
+        (isAuthenticated() && isParent(request.auth.uid) &&
+          userId != request.auth.uid && // Parent is updating someone else
+          isChild(userId) && getChildsParentId(userId) == request.auth.uid && // Target is their child
+          request.resource.data.keys().hasOnly(['points']) && // Parent is ONLY sending 'points'
+          request.resource.data.points is number && // New points value is a number
+          // Ensure other critical fields of the child's profile are not being modified
+          request.resource.data.get('uid', resource.data.uid) == resource.data.uid &&
+          request.resource.data.get('role', resource.data.role) == resource.data.role &&
+          request.resource.data.get('email', resource.data.email) == resource.data.email &&
+          request.resource.data.get('parentId', resource.data.parentId) == resource.data.parentId &&
+          request.resource.data.get('displayName', resource.data.displayName) == resource.data.displayName &&
+          request.resource.data.get('name', resource.data.name) == resource.data.name &&
+          request.resource.data.get('gender', resource.data.gender) == resource.data.gender &&
+          request.resource.data.get('age', resource.data.age) == resource.data.age &&
+          request.resource.data.get('hobbies', resource.data.hobbies) == resource.data.hobbies
+        );
 
       allow delete: if isAuthenticated() &&
                        isParent(request.auth.uid) &&
-                       resource.data.role == 'child' && // The document being deleted must have role 'child'
-                       resource.data.parentId == request.auth.uid; // The child's parentId must match the authenticated parent's UID
+                       resource.data.role == 'child' &&
+                       resource.data.parentId == request.auth.uid;
     }
 
-    // CHILDREN subcollection (under parent's user document - records for dashboard)
+    // CHILDREN subcollection (under parent's user document)
     match /users/{parentDocId}/children/{childRecordId} {
       allow create: if isParent(request.auth.uid) && request.auth.uid == parentDocId &&
                        request.resource.data.name is string && request.resource.data.name.size() > 0 &&
@@ -107,32 +118,34 @@ service cloud.firestore {
                        request.resource.data.age is number && request.resource.data.age >= 1 && request.resource.data.age <= 18 &&
                        request.resource.data.hobbies is list && request.resource.data.hobbies.size() >= 1 &&
                        request.resource.data.points == 0 &&
-                       request.resource.data.authUid is string && // authUid must be present from child creation
+                       request.resource.data.authUid is string &&
                        (request.resource.data.initialPassword is string || request.resource.data.initialPassword == null);
 
       allow read, delete: if isParent(request.auth.uid) && request.auth.uid == parentDocId;
 
-      // Parent can update their child's record in this subcollection
       allow update: if isParent(request.auth.uid) && request.auth.uid == parentDocId &&
-                       // Ensure key identifiers are not changed
-                       request.resource.data.get('authUid', resource.data.authUid) == resource.data.authUid &&
-                       request.resource.data.get('email', resource.data.email) == resource.data.email &&
-                       // Scenario 1: Parent is ONLY updating points
-                       (
-                         (request.resource.data.keys().hasOnly(['points']) &&
-                          request.resource.data.points is number
-                         ) ||
-                         // Scenario 2: Parent is updating other allowed fields (e.g. name, age, hobbies - if you want to allow this)
-                         // This part needs to be defined if parents can edit child details from the dashboard view of this subcollection
-                         // For now, primarily supporting point updates.
-                         // Example for allowing name update too:
-                         // (request.resource.data.keys().hasAny(['points', 'name']) &&
-                         //  (!('points' in request.resource.data.keys()) || request.resource.data.points is number) &&
-                         //  (!('name' in request.resource.data.keys()) || (request.resource.data.name is string && request.resource.data.name.size() > 0))
-                         // )
-                         // For simplicity, if only points are updated from task verification:
-                         (request.resource.data.keys().hasOnly(['points']) && request.resource.data.points is number)
-                       );
+                      // Ensure immutable fields are not changed
+                      request.resource.data.get('authUid', resource.data.authUid) == resource.data.authUid &&
+                      request.resource.data.get('email', resource.data.email) == resource.data.email &&
+                      request.resource.data.get('createdAt', resource.data.createdAt) == resource.data.createdAt &&
+                      (
+                        // Scenario: Parent updating ONLY points
+                        (request.resource.data.keys().hasOnly(['points']) &&
+                         request.resource.data.points is number
+                        ) ||
+                        // Scenario: Parent editing other allowed fields (e.g. name, age, hobbies on this sub-doc, but NOT points here unless specifically allowed)
+                        // For now, let's stick to only points update for simplicity from batch write.
+                        // If parent needs to edit name/age/hobbies here, create a separate UI and rule.
+                        // Example for allowing more fields:
+                        // (request.resource.data.keys().hasAny(['name', 'age', 'hobbies', 'points']) &&
+                        //  (!('name' in request.resource.data.keys()) || request.resource.data.name is string) &&
+                        //  ... other field validations
+                        // )
+                        // For the batch operation which only sends points:
+                        (request.resource.data.keys().hasOnly(['points']) &&
+                         request.resource.data.points is number
+                        )
+                      );
     }
 
     // TASKS collection
@@ -145,45 +158,41 @@ service cloud.firestore {
                        request.resource.data.createdAt == request.time &&
                        request.resource.data.assignedToUids is list && request.resource.data.assignedToUids.size() >= 1 &&
                        request.resource.data.assignedToNames is list && request.resource.data.assignedToNames.size() >= 1 &&
-                       // Basic check: ensure the first assigned child belongs to the parent.
-                       (request.resource.data.assignedToUids.size() == 0 || // Should not happen due to size() >= 1 check, but defensive
+                       (request.resource.data.assignedToUids.size() == 0 || // Should always be >= 1 based on above, but defensive
                         (isChild(request.resource.data.assignedToUids[0]) &&
                          getChildsParentId(request.resource.data.assignedToUids[0]) == request.auth.uid
                         )
                        );
 
       allow read: if (isParent(request.auth.uid) && request.auth.uid == resource.data.parentId) ||
-                     // Child can read if their UID is in the assignedToUids list AND task is from their parent
                      (isChild(request.auth.uid) && request.auth.uid in resource.data.assignedToUids &&
                       getChildsParentId(request.auth.uid) == resource.data.parentId);
 
       allow update: if (
-                    // Parent can update task
+                    // Scenario 1: Parent updating task
                     (isParent(request.auth.uid) && request.auth.uid == resource.data.parentId && // Parent owns the task
-                        // Ensure immutable fields (parentId, createdAt) are not changed.
+                        // Immutable fields must not change if present in request, or must not be in request if not intended to change
                         request.resource.data.get('parentId', resource.data.parentId) == resource.data.parentId &&
                         request.resource.data.get('createdAt', resource.data.createdAt) == resource.data.createdAt &&
-                        ( // Parent update scenarios
-                         // Scenario 1: Verifying a completed task
-                         (resource.data.status == 'completed' && request.resource.data.status == 'verified' &&
-                          request.resource.data.keys().hasOnly(['status']) // ONLY status is being sent for verification
-                         ) ||
-                         // Scenario 2: Parent editing a PENDING task
-                         (resource.data.status == 'pending' &&
-                          // Status, if sent by parent during edit, must remain 'pending'
-                          request.resource.data.get('status', resource.data.status) == 'pending' &&
-                          // Validate specific fields if they are present in the request
-                          ( !('description' in request.resource.data.keys()) || (request.resource.data.description is string && request.resource.data.description.size() > 0) ) &&
-                          ( !('points' in request.resource.data.keys()) || (request.resource.data.points is number && request.resource.data.points > 0) ) &&
-                          ( !('assignedToUids' in request.resource.data.keys()) || (request.resource.data.assignedToUids is list && request.resource.data.assignedToUids.size() >= 1) ) &&
-                          ( !('assignedToNames' in request.resource.data.keys()) || (request.resource.data.assignedToNames is list && request.resource.data.assignedToNames.size() >= 1) ) &&
-                          // All keys in the request must be from an allowed set for pending task edits.
-                          // parentId, createdAt, status are included here because their values are constrained by earlier get() checks.
-                          request.resource.data.keys().subsetOf(['description', 'points', 'assignedToUids', 'assignedToNames', 'status', 'parentId', 'createdAt'])
-                         )
+                        (
+                          // Sub-Scenario 1.1: Parent Verifying a completed task
+                          (resource.data.status == 'completed' && request.resource.data.status == 'verified' &&
+                           request.resource.data.keys().hasOnly(['status']) // ONLY status is being sent for verification
+                          ) ||
+                          // Sub-Scenario 1.2: Parent editing a PENDING task
+                          (resource.data.status == 'pending' &&
+                           request.resource.data.get('status', 'pending') == 'pending' && // Status if sent must be 'pending'
+                           // Check allowed fields for edit and their types if present in request
+                           (!('description' in request.resource.data.keys()) || (request.resource.data.description is string && request.resource.data.description.size() > 0)) &&
+                           (!('points' in request.resource.data.keys()) || (request.resource.data.points is number && request.resource.data.points > 0)) &&
+                           (!('assignedToUids' in request.resource.data.keys()) || (request.resource.data.assignedToUids is list && request.resource.data.assignedToUids.size() >= 1)) &&
+                           (!('assignedToNames' in request.resource.data.keys()) || (request.resource.data.assignedToNames is list && request.resource.data.assignedToNames.size() >= 1)) &&
+                           // All keys in the request must be from this allowed set
+                           request.resource.data.keys().subsetOf(['description', 'points', 'assignedToUids', 'assignedToNames', 'status', 'parentId', 'createdAt'])
+                          )
                         )
                      ) ||
-                    // Assigned Child can update status from 'pending' to 'completed'
+                    // Scenario 2: Assigned Child updating status from 'pending' to 'completed'
                     (isChild(request.auth.uid) && request.auth.uid in resource.data.assignedToUids &&
                      getChildsParentId(request.auth.uid) == resource.data.parentId && // Task from their parent
                      resource.data.status == 'pending' && request.resource.data.status == 'completed' &&
@@ -203,18 +212,14 @@ service cloud.firestore {
                        request.resource.data.createdAt == request.time;
 
       allow read: if (isParent(request.auth.uid) && request.auth.uid == resource.data.parentId) ||
-                     // Child can read rewards if they belong to the reward's parent
                      (isChild(request.auth.uid) &&
                       getChildsParentId(request.auth.uid) == resource.data.parentId);
 
       allow update: if isParent(request.auth.uid) && request.auth.uid == resource.data.parentId &&
                        // Ensure immutable fields are not changed
                        request.resource.data.get('parentId', resource.data.parentId) == resource.data.parentId &&
-                       request.resource.data.get('createdAt', resource.data.createdAt) == resource.data.createdAt &&
-                       // Allow description and pointsCost to be updated
-                       ( !('description' in request.resource.data.keys()) || (request.resource.data.description is string && request.resource.data.description.size() > 0) ) &&
-                       ( !('pointsCost' in request.resource.data.keys()) || (request.resource.data.pointsCost is number && request.resource.data.pointsCost > 0) ) &&
-                       request.resource.data.keys().subsetOf(['description', 'pointsCost', 'parentId', 'createdAt']);
+                       request.resource.data.get('createdAt', resource.data.createdAt) == resource.data.createdAt;
+                       // Add checks for description/pointsCost if they are editable
 
       allow delete: if isParent(request.auth.uid) && request.auth.uid == resource.data.parentId;
     }

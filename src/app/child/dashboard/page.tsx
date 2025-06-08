@@ -4,12 +4,13 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Star, Trophy, Clock } from "lucide-react"; // Removed AlertTriangle, Clock might be used for "awaiting verification"
+import { CheckCircle2, Star, Trophy, Clock, Edit3 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Task, Reward } from "@/types";
-import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
+import Link from "next/link";
 
 export default function ChildDashboardPage() {
   const { user, userProfile } = useAuth();
@@ -67,7 +68,6 @@ export default function ChildDashboardPage() {
   }, [user, userProfile, toast]);
 
   const handleMarkTaskDone = async (taskId: string) => {
-    // userProfile is not strictly needed for this operation but included for consistency with original structure
     if (!user || !userProfile) { 
       toast({ title: "Authentication Error", description: "Please log in again.", variant: "destructive"});
       return;
@@ -87,7 +87,7 @@ export default function ChildDashboardPage() {
         return;
       }
 
-      await updateDoc(taskRef, { status: "completed" }); // Child sets to 'completed'
+      await updateDoc(taskRef, { status: "completed" }); 
 
       toast({ title: "Task Submitted!", description: `"${taskData.description}" has been submitted for parent verification.` });
     } catch (error) {
@@ -101,11 +101,31 @@ export default function ChildDashboardPage() {
       toast({ title: "Cannot Claim Reward", description: "Not enough points or user not found.", variant: "destructive"});
       return;
     }
+    const newPoints = currentPoints - reward.pointsCost;
     try {
       const userProfileRef = doc(db, "users", user.uid);
       await updateDoc(userProfileRef, {
-        points: currentPoints - reward.pointsCost
+        points: newPoints
       });
+      
+      // Also update points in parent's subcollection for the child
+      if (userProfile.parentId) {
+        const parentChildrenRef = collection(db, "users", userProfile.parentId, "children");
+        const q = query(parentChildrenRef, where("authUid", "==", user.uid));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          const childSubDoc = querySnapshot.docs[0];
+          const childSubDocRef = doc(db, "users", userProfile.parentId, "children", childSubDoc.id);
+          await updateDoc(childSubDocRef, {
+            points: newPoints 
+          });
+          console.log("Successfully updated points in parent's subcollection for child:", user.uid);
+        } else {
+          console.warn("Could not find child record in parent's subcollection to update points. Child UID:", user.uid, "Parent UID:", userProfile.parentId);
+        }
+      }
+
       toast({ title: "Reward Claimed!", description: `You've claimed "${reward.description}". Your parent will be notified.` });
     } catch (error) {
       console.error("Error claiming reward:", error);
@@ -126,13 +146,20 @@ export default function ChildDashboardPage() {
           </h1>
           <p className="text-muted-foreground">Here are your tasks and available rewards.</p>
         </div>
-        <Card className="p-4 bg-primary/10 shadow-md">
-          <div className="flex items-center space-x-2">
-            <Star className="h-6 w-6 text-primary" />
-            <span className="text-2xl font-bold text-primary">{currentPoints}</span>
-            <span className="text-sm text-muted-foreground">pts</span>
-          </div>
-        </Card>
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/child/profile/edit">
+              <Edit3 className="mr-2 h-4 w-4" /> Edit Profile
+            </Link>
+          </Button>
+          <Card className="p-4 bg-primary/10 shadow-md">
+            <div className="flex items-center space-x-2">
+              <Star className="h-6 w-6 text-primary" />
+              <span className="text-2xl font-bold text-primary">{currentPoints}</span>
+              <span className="text-sm text-muted-foreground">pts</span>
+            </div>
+          </Card>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">

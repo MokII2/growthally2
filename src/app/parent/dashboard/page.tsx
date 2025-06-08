@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianMask, Activity, Cake, Palette, Brain, CookingPot, BookOpen, PersonStanding, Music, Gamepad2, Code2, CheckSquare, BellRing } from "lucide-react";
+import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianMask, Activity, Cake, Palette, Brain, CookingPot, BookOpen, PersonStanding, Music, Gamepad2, Code2, CheckSquare, BellRing, Edit3 } from "lucide-react";
 import AddChildModal from "@/components/modals/AddChildModal";
 import AddTaskModal from "@/components/modals/AddTaskModal";
 import AddRewardModal from "@/components/modals/AddRewardModal";
@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
+import Link from "next/link";
 
 
 const hobbyIcons: Record<string, React.ElementType> = {
@@ -233,9 +234,14 @@ export default function ParentDashboardPage() {
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight font-headline">Welcome, Parent!</h1>
+          <h1 className="text-3xl font-bold tracking-tight font-headline">Welcome, {userProfile?.name || "Parent"}!</h1>
           <p className="text-muted-foreground">Manage your family's tasks and rewards.</p>
         </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/parent/profile/edit">
+            <Edit3 className="mr-2 h-4 w-4" /> Edit Profile
+          </Link>
+        </Button>
       </div>
 
       {/* Tasks Awaiting Verification */}
@@ -508,4 +514,3 @@ export default function ParentDashboardPage() {
     </div>
   );
 }
-

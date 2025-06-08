@@ -13,7 +13,7 @@ import {
   sendPasswordResetEmail,
   type Auth,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, collection, addDoc, writeBatch, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, collection, addDoc, writeBatch, updateDoc, query, where, getDocs } from 'firebase/firestore';
 import { auth, db, createTemporaryAuthInstance } from '@/lib/firebase'; // Import primary auth and db
 import type { UserProfile, AuthContextType, Child } from '@/types';
 import { useRouter } from 'next/navigation';
@@ -57,7 +57,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (firebaseUser) {
         setUser(firebaseUser);
         const fetchedProfileData = await fetchUserProfile(firebaseUser.uid);
-        setUserProfile(fetchedProfileData); // Simplified: directly set, handles null if profile not found
+        setUserProfile(fetchedProfileData);
       } else {
         setUser(null);
         setUserProfile(null);
@@ -66,6 +66,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
     return () => unsubscribe();
   }, []);
+
+  const refreshUserProfile = async () => {
+    if (user) {
+      setLoading(true);
+      const refreshedProfile = await fetchUserProfile(user.uid);
+      setUserProfile(refreshedProfile);
+      setLoading(false);
+    }
+  };
 
  const signUpParent = async (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId' | 'hobbies'> & {password: string}): Promise<FirebaseUser | null> => {
     setLoading(true);
@@ -119,7 +128,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const childUser = userCredential.user;
       const profile = await fetchUserProfile(childUser.uid);
       if (profile && profile.role === 'child') {
-        // onAuthStateChanged will handle setting user and userProfile globally
         setLoading(false);
         return childUser;
       } else {
@@ -249,6 +257,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     signOutUser,
     fetchUserProfile,
     sendPasswordReset,
+    refreshUserProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

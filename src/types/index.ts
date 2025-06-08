@@ -70,8 +70,8 @@ export interface AuthContextType {
   signOutUser: () => Promise<void>;
   fetchUserProfile: (uid: string) => Promise<UserProfile | null>;
   sendPasswordReset: (email: string) => Promise<boolean>;
+  refreshUserProfile: () => Promise<void>; // Added for profile refresh
 }
 
 export const HOBBY_OPTIONS = ["运动", "阅读", "音乐", "舞蹈", "计算", "手工", "烘培", "书法", "绘画", "编程"] as const;
 export type Hobby = typeof HOBBY_OPTIONS[number];
-

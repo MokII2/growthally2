@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Star, Trophy, AlertTriangle, Clock } from "lucide-react";
+import { CheckCircle2, Star, Trophy, Clock } from "lucide-react"; // Removed AlertTriangle, Clock might be used for "awaiting verification"
 import { useAuth } from "@/contexts/AuthContext";
 import type { Task, Reward } from "@/types";
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from "firebase/firestore";
@@ -54,7 +54,7 @@ export default function ChildDashboardPage() {
     const userProfileRef = doc(db, "users", user.uid);
     const unsubscribeUserProfile = onSnapshot(userProfileRef, (docSnap) => {
       if (docSnap.exists()) {
-        const updatedProfile = docSnap.data() as any; // Cast to any for userProfile updates
+        const updatedProfile = docSnap.data() as any; 
         setCurrentPoints(updatedProfile.points ?? 0);
       }
     });
@@ -67,7 +67,11 @@ export default function ChildDashboardPage() {
   }, [user, userProfile, toast]);
 
   const handleMarkTaskDone = async (taskId: string) => {
-    if (!user || !userProfile) return;
+    // userProfile is not strictly needed for this operation but included for consistency with original structure
+    if (!user || !userProfile) { 
+      toast({ title: "Authentication Error", description: "Please log in again.", variant: "destructive"});
+      return;
+    }
     
     const taskRef = doc(db, "tasks", taskId);
     try {
@@ -160,7 +164,7 @@ export default function ChildDashboardPage() {
             {completedTasksAwaitingVerification.length > 0 && (
                  <div className="mt-4">
                     <h3 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center">
-                        <Clock className="h-4 w-4 mr-1.5 text-yellow-500" /> {/* Changed Icon */}
+                        <Clock className="h-4 w-4 mr-1.5 text-yellow-500" />
                         Tasks Submitted (Awaiting Parent Verification):
                     </h3>
                      <ul className="space-y-2 opacity-70">

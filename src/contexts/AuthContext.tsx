@@ -13,7 +13,7 @@ import {
   sendPasswordResetEmail,
   type Auth,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, collection, addDoc, writeBatch, updateDoc, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, collection, writeBatch, updateDoc, query, where, getDocs } from 'firebase/firestore'; // Removed addDoc, added setDoc
 import { auth, db, createTemporaryAuthInstance } from '@/lib/firebase'; // Import primary auth and db
 import type { UserProfile, AuthContextType, Child } from '@/types';
 import { useRouter } from 'next/navigation';
@@ -57,7 +57,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (firebaseUser) {
         setUser(firebaseUser);
         const fetchedProfileData = await fetchUserProfile(firebaseUser.uid);
-        setUserProfile(fetchedProfileData);
+        setUserProfile(fetchedProfileData); 
       } else {
         setUser(null);
         setUserProfile(null);
@@ -181,7 +181,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
       await setDoc(doc(db, 'users', newChildUser.uid), childProfileForUsersCollection);
 
-      const childSubcollectionDocData: Omit<Child, 'id'> = {
+      // Use child's UID as the document ID in the subcollection
+      const childSubDocRef = doc(db, 'users', parentAuthUid, 'children', newChildUser.uid); 
+      const childSubcollectionDocData: Omit<Child, 'id'> = { // 'id' is now the doc ID, not a field in data
         name: childDetails.name,
         email: fullEmail,
         points: 0,
@@ -192,9 +194,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         age: childDetails.age,
         hobbies: childDetails.hobbies,
       };
-      await addDoc(collection(db, 'users', parentAuthUid, 'children'), childSubcollectionDocData);
+      await setDoc(childSubDocRef, childSubcollectionDocData);
 
-      console.log(`Child Auth user and profile created for ${childDetails.name}. UID: ${newChildUser.uid}. Initial Password: ${generatedPassword}`);
+      console.log(`Child Auth user and profile created for ${childDetails.name}. UID: ${newChildUser.uid}. Initial Password: ${generatedPassword}. Subcollection Doc ID: ${newChildUser.uid}`);
 
       await cleanup();
       setLoading(false);

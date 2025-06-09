@@ -7,24 +7,24 @@ export interface UserProfile {
   email?: string;
   displayName?: string;
   name?: string;
-  gender?: 'male' | 'female' | 'unspecified'; // Changed '' to 'unspecified'
+  gender?: 'male' | 'female' | 'unspecified';
   age?: number;
   phone?: string;
   parentId?: string;
   points?: number;
-  hobbies?: string[]; // Added for child's main profile
+  hobbies?: string[];
 }
 
 export interface Child {
-  id: string; // Document ID from the subcollection
+  id: string;
   name: string;
   email: string;
   points: number;
-  authUid?: string; // Firebase Auth UID if child has direct login
-  initialPassword?: string; // For parent to see child's first password
-  gender: 'male' | 'female'; // Child gender is required
-  age: number; // Child age is required
-  hobbies: string[]; // Child hobbies are required
+  authUid?: string;
+  initialPassword?: string;
+  gender: 'male' | 'female';
+  age: number;
+  hobbies: string[];
   createdAt?: any;
 }
 
@@ -32,11 +32,13 @@ export interface Task {
   id: string;
   description: string;
   points: number;
-  assignedToUids: string[]; // Array of child UIDs
-  assignedToNames: string[]; // Array of child names for display
+  assignedToUids: string[];
+  assignedToNames: string[];
   status: 'pending' | 'completed' | 'verified';
   parentId: string;
   createdAt: any;
+  completionNotes?: string; // Added for child's notes
+  verificationFeedback?: string; // Added for parent's feedback
 }
 
 export interface Reward {
@@ -47,7 +49,6 @@ export interface Reward {
   createdAt: any;
 }
 
-// Context state type
 export interface AuthContextType {
   user: FirebaseUser | null;
   userProfile: UserProfile | null;
@@ -70,9 +71,8 @@ export interface AuthContextType {
   signOutUser: () => Promise<void>;
   fetchUserProfile: (uid: string) => Promise<UserProfile | null>;
   sendPasswordReset: (email: string) => Promise<boolean>;
-  refreshUserProfile: () => Promise<void>; // Added for profile refresh
+  refreshUserProfile: () => Promise<void>;
 }
 
 export const HOBBY_OPTIONS = ["运动", "阅读", "音乐", "舞蹈", "计算", "手工", "烘培", "书法", "绘画", "编程"] as const;
 export type Hobby = typeof HOBBY_OPTIONS[number];
-

@@ -4,12 +4,13 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianMask, Activity, Palette, Brain, CookingPot, BookOpen, PersonStanding, Music, Gamepad2, Code2, CheckSquare, BellRing } from "lucide-react"; // Removed Edit3
+import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianMask, Activity, Palette, Brain, CookingPot, BookOpen, PersonStanding, Music, Gamepad2, Code2, CheckSquare, BellRing, MessageSquare, RotateCcw } from "lucide-react";
 import AddChildModal from "@/components/modals/AddChildModal";
 import AddTaskModal from "@/components/modals/AddTaskModal";
 import AddRewardModal from "@/components/modals/AddRewardModal";
+import VerifyTaskModal from "@/components/modals/VerifyTaskModal"; // Added import
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, getDoc, writeBatch } from "firebase/firestore";
+import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, getDoc, writeBatch, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Child, Task, Reward } from "@/types";
 import { useToast } from "@/hooks/use-toast";
@@ -25,8 +26,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
-// import Link from "next/link"; // Removed Link as Edit3 button is removed
-
 
 const hobbyIcons: Record<string, React.ElementType> = {
   "运动": Activity,
@@ -42,7 +41,6 @@ const hobbyIcons: Record<string, React.ElementType> = {
   "游戏": Gamepad2, 
 };
 
-
 export default function ParentDashboardPage() {
   const { user, userProfile } = useAuth();
   const { toast } = useToast();
@@ -54,12 +52,13 @@ export default function ParentDashboardPage() {
   const [isAddChildModalOpen, setIsAddChildModalOpen] = useState(false);
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
   const [isAddRewardModalOpen, setIsAddRewardModalOpen] = useState(false);
+  const [isVerifyTaskModalOpen, setIsVerifyTaskModalOpen] = useState(false); // Added state
+  const [selectedTaskForVerification, setSelectedTaskForVerification] = useState<Task | null>(null); // Added state
+
 
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; type: 'child' | 'task' | 'reward'; childAuthUid?: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isVerifyingTask, setIsVerifyingTask] = useState<string | null>(null);
-
-
+  
   useEffect(() => {
     if (!user) return;
     const childrenQuery = query(collection(db, "users", user.uid, "children"), orderBy("name", "asc"));
@@ -97,7 +96,7 @@ export default function ParentDashboardPage() {
   }, [user, toast]);
 
   const handleDataRefreshNeeded = () => {
-    console.log("Data refresh implicitly handled by onSnapshot listeners.");
+    // onSnapshot listeners handle this
   };
 
   const copyToClipboard = (text: string, itemName: string) => {
@@ -116,26 +115,16 @@ export default function ParentDashboardPage() {
   const executeDelete = async () => {
     if (!itemToDelete || !user) return;
     setIsDeleting(true);
-
     try {
       if (itemToDelete.type === 'child') {
         await deleteDoc(doc(db, "users", user.uid, "children", itemToDelete.id));
-        toast({ title: "Child Record Deleted", description: `${itemToDelete.name}'s record has been removed.` });
-
         if (itemToDelete.childAuthUid) {
           const childProfileRef = doc(db, "users", itemToDelete.childAuthUid);
           const childProfileSnap = await getDoc(childProfileRef);
-          if (childProfileSnap.exists()) {
-             await deleteDoc(childProfileRef);
-             toast({ title: "Child Profile Deleted", description: `Main profile for ${itemToDelete.name} also removed.` });
-          }
-           toast({
-            title: "Manual Action May Be Required",
-            description: `If ${itemToDelete.name} had direct login, their Firebase Auth account needs to be deleted manually from the Firebase console.`,
-            variant: "default",
-            duration: 10000,
-          });
+          if (childProfileSnap.exists()) await deleteDoc(childProfileRef);
+          toast({ title: "Manual Action May Be Required", description: `If ${itemToDelete.name} had direct login, their Firebase Auth account needs to be deleted manually.`, variant: "default", duration: 10000 });
         }
+        toast({ title: "Child Record Deleted", description: `${itemToDelete.name}'s record has been removed.` });
       } else if (itemToDelete.type === 'task') {
         await deleteDoc(doc(db, "tasks", itemToDelete.id));
         toast({ title: "Task Deleted", description: `Task "${itemToDelete.name}" has been removed.` });
@@ -145,32 +134,29 @@ export default function ParentDashboardPage() {
       }
       setItemToDelete(null); 
     } catch (error: any) {
-      console.error(`Error deleting ${itemToDelete.type} (ID: ${itemToDelete.id}, ChildAuthUID: ${itemToDelete.childAuthUid || 'N/A'}):`, error);
-      console.error("Details of item being deleted:", JSON.stringify(itemToDelete, null, 2));
-      console.error("Current parent Firebase Auth user UID:", user.uid);
-      console.error("Current parent user profile (from AuthContext):", JSON.stringify(userProfile, null, 2));
-      
-      toast({ 
-        title: `Error Deleting ${itemToDelete.type}`, 
-        description: error.message || "Could not complete deletion. Check console for details.", 
-        variant: "destructive" 
-      });
+      console.error(`Error deleting ${itemToDelete.type}:`, error);
+      toast({ title: `Error Deleting ${itemToDelete.type}`, description: error.message || "Could not complete deletion.", variant: "destructive" });
     } finally {
       setIsDeleting(false);
     }
   };
 
-  const handleVerifyTask = async (task: Task) => {
-    if (!user || !task.assignedToUids || task.assignedToUids.length === 0) {
+  const handleOpenVerifyModal = (task: Task) => {
+    setSelectedTaskForVerification(task);
+    setIsVerifyTaskModalOpen(true);
+  };
+
+  const handleConfirmTaskVerification = async (feedback: string) => {
+    if (!user || !selectedTaskForVerification || !selectedTaskForVerification.assignedToUids || selectedTaskForVerification.assignedToUids.length === 0) {
       toast({ title: "Error", description: "Task details incomplete or no children assigned.", variant: "destructive" });
       return;
     }
-    setIsVerifyingTask(task.id);
+    
+    const task = selectedTaskForVerification;
     try {
       const batch = writeBatch(db);
-
       const taskRef = doc(db, "tasks", task.id);
-      batch.update(taskRef, { status: "verified" });
+      batch.update(taskRef, { status: "verified", verificationFeedback: feedback });
 
       for (const childAuthUid of task.assignedToUids) {
         const childProfileRef = doc(db, "users", childAuthUid);
@@ -178,39 +164,46 @@ export default function ParentDashboardPage() {
         if (childProfileSnap.exists()) {
           const currentPoints = childProfileSnap.data().points || 0;
           batch.update(childProfileRef, { points: currentPoints + task.points });
-        } else {
-          console.warn(`Child profile ${childAuthUid} not found for point update.`);
         }
 
         const childSubcollectionDoc = children.find(c => c.authUid === childAuthUid);
-        if (childSubcollectionDoc && childSubcollectionDoc.id) {
+        if (childSubcollectionDoc?.id) { // Ensure childSubcollectionDoc.id is used, which is the child's UID
           const childSubDocRef = doc(db, "users", user.uid, "children", childSubcollectionDoc.id);
           const childSubDocSnap = await getDoc(childSubDocRef);
           if (childSubDocSnap.exists()) {
               const currentSubPoints = childSubDocSnap.data().points || 0;
               batch.update(childSubDocRef, { points: currentSubPoints + task.points });
-          } else {
-              console.warn(`Child subcollection record for ${childAuthUid} (docId: ${childSubcollectionDoc.id}) not found for point update.`);
           }
-        } else {
-            console.warn(`Child subcollection record mapping not found for authUid ${childAuthUid}. This might happen if the child was recently added and the 'children' state hasn't updated yet, or if the child's subcollection document ID is missing.`);
         }
       }
-
       await batch.commit();
       toast({ title: "Task Verified!", description: `"${task.description}" has been verified and points awarded.` });
     } catch (error: any) {
       console.error("Error verifying task:", error);
       toast({ title: "Verification Failed", description: error.message || "Could not verify task.", variant: "destructive" });
     } finally {
-      setIsVerifyingTask(null);
+      setSelectedTaskForVerification(null);
+    }
+  };
+
+  const handleReturnTaskToChild = async (feedback: string) => {
+    if (!selectedTaskForVerification) return;
+    const task = selectedTaskForVerification;
+    try {
+      const taskRef = doc(db, "tasks", task.id);
+      await updateDoc(taskRef, { status: "pending", verificationFeedback: feedback });
+      toast({ title: "Task Returned", description: `"${task.description}" has been returned to the child for revision.` });
+    } catch (error: any) {
+      console.error("Error returning task:", error);
+      toast({ title: "Error Returning Task", description: error.message || "Could not return task.", variant: "destructive" });
+    } finally {
+       setSelectedTaskForVerification(null);
     }
   };
 
   const tasksAwaitingVerification = tasks.filter(task => task.status === 'completed');
   const pendingTasks = tasks.filter(task => task.status === 'pending');
   const verifiedTasks = tasks.filter(task => task.status === 'verified');
-
 
   return (
     <div className="space-y-8">
@@ -237,10 +230,8 @@ export default function ParentDashboardPage() {
           <h1 className="text-3xl font-bold tracking-tight font-headline">Welcome, {userProfile?.name || "Parent"}!</h1>
           <p className="text-muted-foreground">Manage your family's tasks and rewards.</p>
         </div>
-        {/* Edit Profile button removed, functionality moved to header */}
       </div>
 
-      {/* Tasks Awaiting Verification */}
       {tasksAwaitingVerification.length > 0 && (
         <Card className="shadow-lg border-primary/50">
           <CardHeader>
@@ -254,21 +245,25 @@ export default function ParentDashboardPage() {
                 <li key={task.id} className="p-3 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                     <div className="flex-1">
-                      <span className="font-medium">{task.description}</span>
-                      {task.assignedToNames && task.assignedToNames.length > 0 && (
+                      <p className="font-medium">{task.description}</p>
+                       {task.assignedToNames && task.assignedToNames.length > 0 && (
                           <p className="text-xs text-muted-foreground">
                               Submitted by: {task.assignedToNames.join(', ')}
                           </p>
-                      )}
-                       <p className="text-xs text-primary">{task.points} pts</p>
+                       )}
+                       {task.completionNotes && (
+                        <p className="text-xs italic text-primary/80 mt-1 bg-primary/5 p-1.5 rounded-sm">
+                            Child's notes: "{task.completionNotes}"
+                        </p>
+                       )}
+                       <p className="text-sm text-primary mt-1">{task.points} pts</p>
                     </div>
                     <Button 
                       size="sm" 
-                      onClick={() => handleVerifyTask(task)}
-                      disabled={isVerifyingTask === task.id}
+                      onClick={() => handleOpenVerifyModal(task)}
                     >
-                      {isVerifyingTask === task.id ? "Verifying..." : "Verify & Award Points"}
-                      <CheckSquare className="ml-2 h-4 w-4" />
+                      Review Task
+                      <MessageSquare className="ml-2 h-4 w-4" />
                     </Button>
                   </div>
                 </li>
@@ -388,6 +383,11 @@ export default function ParentDashboardPage() {
                                       Assigned to: {task.assignedToNames.join(', ')}
                                   </p>
                               )}
+                              {task.verificationFeedback && task.status === 'pending' && ( // Show feedback if returned
+                                <p className="text-xs italic text-orange-600 dark:text-orange-400 mt-1 bg-orange-100 dark:bg-orange-900/30 p-1.5 rounded-sm">
+                                    <RotateCcw className="inline-block h-3 w-3 mr-1"/> Parent feedback: "{task.verificationFeedback}"
+                                </p>
+                               )}
                             </div>
                             <div className="flex flex-col items-end ml-2">
                               <span className="text-sm text-primary whitespace-nowrap">{task.points} pts</span>
@@ -422,6 +422,9 @@ export default function ParentDashboardPage() {
                                   <p className="text-xs text-green-700 dark:text-green-300">
                                       Completed by: {task.assignedToNames.join(', ')}
                                   </p>
+                              )}
+                              {task.verificationFeedback && (
+                                <p className="text-xs italic text-green-700 dark:text-green-300 mt-0.5">Parent: "{task.verificationFeedback}"</p>
                               )}
                             </div>
                             <div className="flex flex-col items-end ml-2">
@@ -507,6 +510,19 @@ export default function ParentDashboardPage() {
         onClose={() => setIsAddRewardModalOpen(false)} 
         onRewardAdded={handleDataRefreshNeeded}
       />
+      {selectedTaskForVerification && (
+        <VerifyTaskModal
+          isOpen={isVerifyTaskModalOpen}
+          onClose={() => {
+            setIsVerifyTaskModalOpen(false);
+            setSelectedTaskForVerification(null);
+          }}
+          onVerify={handleConfirmTaskVerification}
+          onReject={handleReturnTaskToChild}
+          task={selectedTaskForVerification}
+        />
+      )}
     </div>
   );
 }
+

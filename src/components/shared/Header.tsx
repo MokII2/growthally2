@@ -11,10 +11,19 @@ interface HeaderProps {
 }
 
 export default function Header({ title = "Growth Ally" }: HeaderProps) {
-  const { user, userProfile, signOutUser, loading } = useAuth();
+  const { user, userProfile, signOutUser, loading, isParent, isChild } = useAuth();
 
   // Determine the display name: parent's name, or child's displayName, or fallback
   const displayName = userProfile?.role === 'parent' ? userProfile.name : userProfile?.displayName;
+  
+  let profileEditLink = "/";
+  if (userProfile) {
+    if (isParent) {
+      profileEditLink = "/parent/profile/edit";
+    } else if (isChild) {
+      profileEditLink = "/child/profile/edit";
+    }
+  }
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur-lg">
@@ -29,10 +38,10 @@ export default function Header({ title = "Growth Ally" }: HeaderProps) {
             {user && (
               <>
                 {displayName && (
-                  <span className="hidden items-center text-sm font-medium text-foreground sm:flex">
+                  <Link href={profileEditLink} className="hidden items-center text-sm font-medium text-foreground hover:text-primary sm:flex mr-2 p-2 rounded-md hover:bg-accent transition-colors">
                     <UserCircle className="mr-2 h-5 w-5 text-muted-foreground" />
                     {displayName}
-                  </span>
+                  </Link>
                 )}
                 <Button variant="ghost" size="sm" onClick={signOutUser} disabled={loading}>
                   <LogOut className="mr-1 h-4 w-4" />

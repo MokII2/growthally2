@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianMask, Activity, Cake, Palette, Brain, CookingPot, BookOpen, PersonStanding, Music, Gamepad2, Code2, CheckSquare, BellRing, Edit3 } from "lucide-react";
+import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianMask, Activity, Palette, Brain, CookingPot, BookOpen, PersonStanding, Music, Gamepad2, Code2, CheckSquare, BellRing } from "lucide-react"; // Removed Edit3
 import AddChildModal from "@/components/modals/AddChildModal";
 import AddTaskModal from "@/components/modals/AddTaskModal";
 import AddRewardModal from "@/components/modals/AddRewardModal";
@@ -25,7 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
-import Link from "next/link";
+// import Link from "next/link"; // Removed Link as Edit3 button is removed
 
 
 const hobbyIcons: Record<string, React.ElementType> = {
@@ -237,11 +237,7 @@ export default function ParentDashboardPage() {
           <h1 className="text-3xl font-bold tracking-tight font-headline">Welcome, {userProfile?.name || "Parent"}!</h1>
           <p className="text-muted-foreground">Manage your family's tasks and rewards.</p>
         </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/parent/profile/edit">
-            <Edit3 className="mr-2 h-4 w-4" /> Edit Profile
-          </Link>
-        </Button>
+        {/* Edit Profile button removed, functionality moved to header */}
       </div>
 
       {/* Tasks Awaiting Verification */}

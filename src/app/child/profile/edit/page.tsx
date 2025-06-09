@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { doc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore'; // Removed collection, query, where, getDocs
 import { db } from '@/lib/firebase';
 import { HOBBY_OPTIONS, type UserProfile, type Hobby, type Child } from '@/types';
 import { ArrowLeft } from 'lucide-react';
@@ -63,6 +63,7 @@ export default function ChildEditProfilePage() {
     }
     setIsSubmitting(true);
     try {
+      // Step 1: Update child's main document (this part remains the same)
       const userDocRef = doc(db, 'users', user.uid);
       const updateData: Partial<UserProfile> = {
         displayName: data.displayName,
@@ -72,37 +73,24 @@ export default function ChildEditProfilePage() {
       };
       await updateDoc(userDocRef, updateData);
 
-      // Sync with parent's subcollection
+      // Step 2: Sync to parent's subcollection (using optimized logic)
       if (userProfile.parentId) {
         const parentId = userProfile.parentId;
-        const childrenCollectionRef = collection(db, 'users', parentId, 'children');
-        const q = query(childrenCollectionRef, where('authUid', '==', user.uid));
-        const querySnapshot = await getDocs(q);
+        
+        // Directly construct the path, no query needed!
+        const childSubDocRef = doc(db, 'users', parentId, 'children', user.uid); // user.uid is the child's UID
 
-        if (!querySnapshot.empty) {
-          const childSubDoc = querySnapshot.docs[0];
-          const childSubDocRef = doc(db, 'users', parentId, 'children', childSubDoc.id);
-          
-          const subcollectionUpdateData: Partial<Child> = {
-            name: data.displayName, // Map form's displayName to subcollection's name field
-            gender: data.gender,
-            age: data.age,
-            hobbies: data.hobbies as Hobby[],
-            // Points are handled by other specific actions (reward claim, task verification)
-            // Email and authUid are typically not changed here.
-          };
-          await updateDoc(childSubDocRef, subcollectionUpdateData);
-          console.log("Child profile synced to parent's subcollection.");
-        } else {
-          console.warn("Could not find child record in parent's subcollection to sync. Child UID:", user.uid, "Parent UID:", parentId);
-          // Optionally, inform the user if immediate sync might not be visible to parent
-          // toast({
-          //   title: 'Sync Note',
-          //   description: "Profile updated. Changes to parent's view might take a moment or require parent refresh.",
-          //   variant: 'default',
-          //   duration: 7000,
-          // });
-        }
+        const subcollectionUpdateData: Partial<Child> = {
+          name: data.displayName, // Map form's displayName to subcollection's name field
+          gender: data.gender,
+          age: data.age,
+          hobbies: data.hobbies as Hobby[],
+          // Points are handled by other specific actions
+          // Email and authUid are typically not changed here.
+        };
+        // Execute the update
+        await updateDoc(childSubDocRef, subcollectionUpdateData);
+        console.log("Child profile synced to parent's subcollection.");
       } else {
         console.warn("Child profile updated, but no parentId found in profile to sync with parent's subcollection.");
       }
@@ -111,7 +99,7 @@ export default function ChildEditProfilePage() {
       toast({ title: 'Profile Updated', description: 'Your profile has been successfully updated.' });
       router.push('/child/dashboard');
     } catch (error) {
-      console.error('Error updating child profile and/or syncing with parent:', error);
+      console.error('Error updating profile:', error);
       toast({ title: 'Update Failed', description: 'Could not update your profile completely.', variant: 'destructive' });
     } finally {
       setIsSubmitting(false);

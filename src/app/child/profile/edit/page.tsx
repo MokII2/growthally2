@@ -15,9 +15,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { HOBBY_OPTIONS, type UserProfile, type Hobby } from '@/types';
+import { HOBBY_OPTIONS, type UserProfile, type Hobby, type Child } from '@/types';
 import { ArrowLeft } from 'lucide-react';
 
 const childProfileSchema = z.object({
@@ -40,7 +40,7 @@ export default function ChildEditProfilePage() {
     defaultValues: {
       displayName: '',
       gender: undefined,
-      age: '' as any, // Initialize with empty string
+      age: '' as any, 
       hobbies: [],
     },
   });
@@ -50,15 +50,15 @@ export default function ChildEditProfilePage() {
       reset({
         displayName: userProfile.displayName || '',
         gender: userProfile.gender as 'male' | 'female' || undefined,
-        age: userProfile.age !== undefined && userProfile.age !== null ? userProfile.age : ('' as any), // Use empty string if age is null/undefined
+        age: userProfile.age !== undefined && userProfile.age !== null ? userProfile.age : ('' as any),
         hobbies: userProfile.hobbies || [],
       });
     }
   }, [userProfile, reset]);
 
   const onSubmit: SubmitHandler<ChildProfileFormValues> = async (data) => {
-    if (!user) {
-      toast({ title: 'Error', description: 'Not authenticated.', variant: 'destructive' });
+    if (!user || !userProfile) {
+      toast({ title: 'Error', description: 'Not authenticated or profile not loaded.', variant: 'destructive' });
       return;
     }
     setIsSubmitting(true);
@@ -71,12 +71,48 @@ export default function ChildEditProfilePage() {
         hobbies: data.hobbies as Hobby[],
       };
       await updateDoc(userDocRef, updateData);
-      await refreshUserProfile(); // Refresh context
+
+      // Sync with parent's subcollection
+      if (userProfile.parentId) {
+        const parentId = userProfile.parentId;
+        const childrenCollectionRef = collection(db, 'users', parentId, 'children');
+        const q = query(childrenCollectionRef, where('authUid', '==', user.uid));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          const childSubDoc = querySnapshot.docs[0];
+          const childSubDocRef = doc(db, 'users', parentId, 'children', childSubDoc.id);
+          
+          const subcollectionUpdateData: Partial<Child> = {
+            name: data.displayName, // Map form's displayName to subcollection's name field
+            gender: data.gender,
+            age: data.age,
+            hobbies: data.hobbies as Hobby[],
+            // Points are handled by other specific actions (reward claim, task verification)
+            // Email and authUid are typically not changed here.
+          };
+          await updateDoc(childSubDocRef, subcollectionUpdateData);
+          console.log("Child profile synced to parent's subcollection.");
+        } else {
+          console.warn("Could not find child record in parent's subcollection to sync. Child UID:", user.uid, "Parent UID:", parentId);
+          // Optionally, inform the user if immediate sync might not be visible to parent
+          // toast({
+          //   title: 'Sync Note',
+          //   description: "Profile updated. Changes to parent's view might take a moment or require parent refresh.",
+          //   variant: 'default',
+          //   duration: 7000,
+          // });
+        }
+      } else {
+        console.warn("Child profile updated, but no parentId found in profile to sync with parent's subcollection.");
+      }
+
+      await refreshUserProfile(); 
       toast({ title: 'Profile Updated', description: 'Your profile has been successfully updated.' });
       router.push('/child/dashboard');
     } catch (error) {
-      console.error('Error updating child profile:', error);
-      toast({ title: 'Update Failed', description: 'Could not update your profile.', variant: 'destructive' });
+      console.error('Error updating child profile and/or syncing with parent:', error);
+      toast({ title: 'Update Failed', description: 'Could not update your profile completely.', variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }
@@ -138,7 +174,6 @@ export default function ChildEditProfilePage() {
                   name="age"
                   control={control}
                   render={({ field }) => <Input id="age" type="number" {...field} 
-                    // Ensure value is not undefined for the input
                     value={field.value === undefined || field.value === null ? '' : field.value}
                   />}
                 />

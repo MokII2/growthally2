@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
-import { LogIn, ArrowLeft, KeyRound, UserPlus } from 'lucide-react'; // Added UserPlus
+import { LogIn, ArrowLeft, KeyRound } from 'lucide-react'; // Removed UserPlus, not used on this page
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -27,36 +27,45 @@ import {
 export default function ChildLoginPage() {
   const router = useRouter();
   const { signInChildWithEmail, loading, sendPasswordReset } = useAuth();
-  const [email, setEmail] = useState('');
+  const [emailPrefix, setEmailPrefix] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const { toast } = useToast();
-  const [resetEmail, setResetEmail] = useState('');
+  const [resetEmailPrefix, setResetEmailPrefix] = useState('');
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+
+  const FIXED_DOMAIN = "@growthally.com";
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
-    const childUser = await signInChildWithEmail(email, password);
+    if (!emailPrefix.trim()) {
+      setError('Please enter your email prefix.');
+      toast({ title: "Login Failed", description: "Email prefix cannot be empty.", variant: "destructive" });
+      return;
+    }
+    const fullEmail = emailPrefix.trim() + FIXED_DOMAIN;
+    const childUser = await signInChildWithEmail(fullEmail, password);
     if (childUser) {
       toast({ title: "Login Successful!", description: "Welcome back!"});
       router.push('/child/dashboard');
     } else {
-      setError('Invalid email or password. Please try again.');
-      toast({ title: "Login Failed", description: "Invalid email or password. If this is your first time, please ask your parent to add you.", variant: "destructive" });
+      setError('Invalid email prefix or password. Please try again.');
+      toast({ title: "Login Failed", description: "Invalid email prefix or password. If this is your first time, please ask your parent to add you.", variant: "destructive" });
     }
   };
 
   const handlePasswordReset = async () => {
-    if (!resetEmail) {
-      toast({ title: "Email Required", description: "Please enter your email address to reset password.", variant: "destructive" });
+    if (!resetEmailPrefix.trim()) {
+      toast({ title: "Email Prefix Required", description: "Please enter your email prefix to reset password.", variant: "destructive" });
       return;
     }
-    const success = await sendPasswordReset(resetEmail);
+    const fullResetEmail = resetEmailPrefix.trim() + FIXED_DOMAIN;
+    const success = await sendPasswordReset(fullResetEmail);
     if (success) {
-      toast({ title: "Password Reset Email Sent", description: `If an account exists for ${resetEmail}, you will receive an email with instructions.` });
+      toast({ title: "Password Reset Email Sent", description: `If an account exists for ${fullResetEmail}, you will receive an email with instructions.` });
       setIsResetDialogOpen(false);
-      setResetEmail('');
+      setResetEmailPrefix('');
     } else {
       toast({ title: "Error Sending Reset Email", description: "Could not send password reset email. Please try again.", variant: "destructive" });
     }
@@ -74,16 +83,21 @@ export default function ChildLoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email-child-login">Email</Label>
-              <Input
-                id="email-child-login"
-                type="email"
-                placeholder="your.email@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="bg-background/70"
-              />
+              <Label htmlFor="email-prefix-child-login">Email Prefix</Label>
+              <div className="flex items-center">
+                <Input
+                  id="email-prefix-child-login"
+                  type="text"
+                  placeholder="your.username"
+                  value={emailPrefix}
+                  onChange={(e) => setEmailPrefix(e.target.value)}
+                  required
+                  className="bg-background/70 rounded-r-none"
+                />
+                <span className="inline-flex items-center px-3 text-sm text-muted-foreground border border-l-0 border-input rounded-r-md bg-secondary h-10">
+                  {FIXED_DOMAIN}
+                </span>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="password-child-login">Password</Label>
@@ -114,21 +128,27 @@ export default function ChildLoginPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Reset Your Password</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Enter your email address below and we'll send you a link to reset your password.
+                    Enter your email prefix below. We'll send a reset link to {`{prefix}`}{FIXED_DOMAIN}.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <div className="space-y-2 py-2">
-                  <Label htmlFor="reset-email-child">Email Address</Label>
-                  <Input
-                    id="reset-email-child"
-                    type="email"
-                    placeholder="your.email@example.com"
-                    value={resetEmail}
-                    onChange={(e) => setResetEmail(e.target.value)}
-                  />
+                  <Label htmlFor="reset-email-prefix-child">Email Prefix</Label>
+                   <div className="flex items-center">
+                    <Input
+                        id="reset-email-prefix-child"
+                        type="text"
+                        placeholder="your.username"
+                        value={resetEmailPrefix}
+                        onChange={(e) => setResetEmailPrefix(e.target.value)}
+                        className="rounded-r-none"
+                    />
+                    <span className="inline-flex items-center px-3 text-sm text-muted-foreground border border-l-0 border-input rounded-r-md bg-secondary h-10">
+                        {FIXED_DOMAIN}
+                    </span>
+                  </div>
                 </div>
                 <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => setResetEmail('')}>Cancel</AlertDialogCancel>
+                  <AlertDialogCancel onClick={() => setResetEmailPrefix('')}>Cancel</AlertDialogCancel>
                   <AlertDialogAction onClick={handlePasswordReset} disabled={loading}>
                     {loading ? "Sending..." : "Send Reset Link"}
                   </AlertDialogAction>

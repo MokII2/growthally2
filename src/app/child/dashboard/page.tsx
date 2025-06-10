@@ -4,13 +4,13 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Star, Trophy, Clock } from "lucide-react";
+import { CheckCircle2, Star, Trophy, Clock, RotateCcw } from "lucide-react"; // Added RotateCcw
 import { useAuth } from "@/contexts/AuthContext";
 import type { Task, Reward } from "@/types";
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, writeBatch, increment } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import CompleteTaskModal from "@/components/modals/CompleteTaskModal"; // Added import
+import CompleteTaskModal from "@/components/modals/CompleteTaskModal";
 
 export default function ChildDashboardPage() {
   const { user, userProfile } = useAuth();
@@ -98,6 +98,7 @@ export default function ChildDashboardPage() {
       await updateDoc(taskRef, { 
         status: "completed",
         completionNotes: completionNotes 
+        // verificationFeedback is intentionally not cleared here, parent will overwrite or it's irrelevant if task is now completed
       });
 
       toast({ title: "Task Submitted!", description: `"${taskData.description}" has been submitted for parent verification.` });
@@ -174,14 +175,24 @@ export default function ChildDashboardPage() {
             {pendingTasks.length > 0 ? (
               <ul className="space-y-3">
                 {pendingTasks.map(task => (
-                  <li key={task.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
-                    <div>
-                      <p className="font-medium">{task.description}</p>
-                      <p className="text-sm text-primary">{task.points} pts</p>
+                  <li key={task.id} className="p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="font-medium">{task.description}</p>
+                        <p className="text-sm text-primary">{task.points} pts</p>
+                        {task.verificationFeedback && task.status === 'pending' && (
+                          <div className="mt-1.5 p-2 rounded-md bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800">
+                            <p className="text-xs font-semibold text-orange-700 dark:text-orange-300 flex items-center">
+                              <RotateCcw className="h-3 w-3 mr-1.5"/> Parent's Feedback (Please Revise):
+                            </p>
+                            <p className="text-xs italic text-orange-600 dark:text-orange-400 mt-0.5">"{task.verificationFeedback}"</p>
+                          </div>
+                        )}
+                      </div>
+                      <Button size="sm" onClick={() => handleOpenCompleteTaskModal(task)} className="ml-2 self-start">
+                        Mark as Done
+                      </Button>
                     </div>
-                    <Button size="sm" onClick={() => handleOpenCompleteTaskModal(task)}>
-                      Mark as Done
-                    </Button>
                   </li>
                 ))}
               </ul>
@@ -198,8 +209,11 @@ export default function ChildDashboardPage() {
                       <ul className="space-y-2 opacity-70">
                         {completedTasksAwaitingVerification.map(task => (
                           <li key={task.id} className="flex items-center justify-between p-2 rounded-md bg-yellow-100 dark:bg-yellow-900/30">
-                            <span className="font-medium line-through">{task.description}</span>
-                            <span className="text-xs text-yellow-600 dark:text-yellow-400">Awaiting Verification</span>
+                            <div className="flex-1">
+                                <p className="font-medium line-through">{task.description}</p>
+                                {task.completionNotes && <p className="text-xs italic text-yellow-700 dark:text-yellow-300 mt-0.5">Your notes: "{task.completionNotes}"</p>}
+                            </div>
+                            <span className="text-xs text-yellow-600 dark:text-yellow-400 ml-2">Awaiting Verification</span>
                           </li>
                         ))}
                       </ul>
@@ -271,3 +285,5 @@ export default function ChildDashboardPage() {
     </div>
   );
 }
+
+    

@@ -8,9 +8,9 @@ import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianM
 import AddChildModal from "@/components/modals/AddChildModal";
 import AddTaskModal from "@/components/modals/AddTaskModal";
 import AddRewardModal from "@/components/modals/AddRewardModal";
-import VerifyTaskModal from "@/components/modals/VerifyTaskModal"; // Added import
+import VerifyTaskModal from "@/components/modals/VerifyTaskModal";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, getDoc, writeBatch, updateDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, getDoc, writeBatch, updateDoc, increment } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Child, Task, Reward } from "@/types";
 import { useToast } from "@/hooks/use-toast";
@@ -52,8 +52,8 @@ export default function ParentDashboardPage() {
   const [isAddChildModalOpen, setIsAddChildModalOpen] = useState(false);
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
   const [isAddRewardModalOpen, setIsAddRewardModalOpen] = useState(false);
-  const [isVerifyTaskModalOpen, setIsVerifyTaskModalOpen] = useState(false); // Added state
-  const [selectedTaskForVerification, setSelectedTaskForVerification] = useState<Task | null>(null); // Added state
+  const [isVerifyTaskModalOpen, setIsVerifyTaskModalOpen] = useState(false);
+  const [selectedTaskForVerification, setSelectedTaskForVerification] = useState<Task | null>(null);
 
 
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; type: 'child' | 'task' | 'reward'; childAuthUid?: string } | null>(null);
@@ -147,37 +147,33 @@ export default function ParentDashboardPage() {
   };
 
   const handleConfirmTaskVerification = async (feedback: string) => {
-    if (!user || !selectedTaskForVerification || !selectedTaskForVerification.assignedToUids || selectedTaskForVerification.assignedToUids.length === 0) {
-      toast({ title: "Error", description: "Task details incomplete or no children assigned.", variant: "destructive" });
+    if (!user || !selectedTaskForVerification) {
+      toast({ title: "Error", description: "Task details are missing.", variant: "destructive" });
       return;
     }
     
     const task = selectedTaskForVerification;
+    if (!task.assignedToUids || task.assignedToUids.length === 0) {
+        toast({ title: "Error", description: "This task has no assigned children.", variant: "destructive" });
+        return;
+    }
+
+    const batch = writeBatch(db);
     try {
-      const batch = writeBatch(db);
       const taskRef = doc(db, "tasks", task.id);
       batch.update(taskRef, { status: "verified", verificationFeedback: feedback });
 
       for (const childAuthUid of task.assignedToUids) {
         const childProfileRef = doc(db, "users", childAuthUid);
-        const childProfileSnap = await getDoc(childProfileRef);
-        if (childProfileSnap.exists()) {
-          const currentPoints = childProfileSnap.data().points || 0;
-          batch.update(childProfileRef, { points: currentPoints + task.points });
-        }
+        batch.update(childProfileRef, { points: increment(task.points) });
 
-        const childSubcollectionDoc = children.find(c => c.authUid === childAuthUid);
-        if (childSubcollectionDoc?.id) { // Ensure childSubcollectionDoc.id is used, which is the child's UID
-          const childSubDocRef = doc(db, "users", user.uid, "children", childSubcollectionDoc.id);
-          const childSubDocSnap = await getDoc(childSubDocRef);
-          if (childSubDocSnap.exists()) {
-              const currentSubPoints = childSubDocSnap.data().points || 0;
-              batch.update(childSubDocRef, { points: currentSubPoints + task.points });
-          }
-        }
+        const childSubDocRef = doc(db, "users", user.uid, "children", childAuthUid);
+        batch.update(childSubDocRef, { points: increment(task.points) });
       }
+      
       await batch.commit();
       toast({ title: "Task Verified!", description: `"${task.description}" has been verified and points awarded.` });
+
     } catch (error: any) {
       console.error("Error verifying task:", error);
       toast({ title: "Verification Failed", description: error.message || "Could not verify task.", variant: "destructive" });
@@ -383,9 +379,9 @@ export default function ParentDashboardPage() {
                                       Assigned to: {task.assignedToNames.join(', ')}
                                   </p>
                               )}
-                              {task.verificationFeedback && task.status === 'pending' && ( // Show feedback if returned
+                              {task.verificationFeedback && task.status === 'pending' && (
                                 <p className="text-xs italic text-orange-600 dark:text-orange-400 mt-1 bg-orange-100 dark:bg-orange-900/30 p-1.5 rounded-sm">
-                                    <RotateCcw className="inline-block h-3 w-3 mr-1"/> Parent feedback: "{task.verificationFeedback}"
+                                    <RotateCcw className="inline-block h-3 w-3 mr-1"/> Your feedback (returned to child): "{task.verificationFeedback}"
                                 </p>
                                )}
                             </div>
@@ -424,7 +420,7 @@ export default function ParentDashboardPage() {
                                   </p>
                               )}
                               {task.verificationFeedback && (
-                                <p className="text-xs italic text-green-700 dark:text-green-300 mt-0.5">Parent: "{task.verificationFeedback}"</p>
+                                <p className="text-xs italic text-green-700 dark:text-green-300 mt-0.5">Your feedback: "{task.verificationFeedback}"</p>
                               )}
                             </div>
                             <div className="flex flex-col items-end ml-2">
@@ -526,3 +522,4 @@ export default function ParentDashboardPage() {
   );
 }
 
+    

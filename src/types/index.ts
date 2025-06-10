@@ -37,8 +37,8 @@ export interface Task {
   status: 'pending' | 'completed' | 'verified';
   parentId: string;
   createdAt: any;
-  completionNotes?: string; // Added for child's notes
-  verificationFeedback?: string; // Added for parent's feedback
+  completionNotes?: string;
+  verificationFeedback?: string;
 }
 
 export interface Reward {
@@ -47,6 +47,16 @@ export interface Reward {
   pointsCost: number;
   parentId: string;
   createdAt: any;
+}
+
+export interface ClaimedReward {
+  id: string; // Document ID of this claim record
+  originalRewardId: string; // ID of the reward definition
+  rewardDescription: string;
+  pointsCost: number;
+  claimedAt: any; // Firebase Timestamp
+  parentId: string; // Parent who defined the original reward
+  childUid: string; // UID of the child who claimed it
 }
 
 export interface AuthContextType {

@@ -38,6 +38,7 @@ export interface Task {
   parentId: string;
   createdAt: any;
   completionNotes?: string;
+  completionImageURL?: string; // Added for image upload
   verificationFeedback?: string;
 }
 
@@ -86,3 +87,4 @@ export interface AuthContextType {
 
 export const HOBBY_OPTIONS = ["运动", "阅读", "音乐", "舞蹈", "计算", "手工", "烘培", "书法", "绘画", "编程"] as const;
 export type Hobby = typeof HOBBY_OPTIONS[number];
+

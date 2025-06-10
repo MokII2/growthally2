@@ -11,6 +11,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import type { Task } from '@/types';
 import { Separator } from '../ui/separator';
+import Image from 'next/image'; // For displaying image
+import { ImageIcon } from 'lucide-react';
 
 interface VerifyTaskModalProps {
   isOpen: boolean;
@@ -39,29 +41,38 @@ export default function VerifyTaskModal({ isOpen, onClose, onVerify, onReject, t
 
   useEffect(() => {
     if (task) {
-      setValue("verificationFeedback", task.verificationFeedback || "");
+      // Reset feedback only if it's a new task or feedback hasn't been set from the task yet
+      // This prevents overriding feedback if the modal reopens for the same task after an initial feedback input attempt
+      if (task.verificationFeedback && task.verificationFeedback !== watch("verificationFeedback")) {
+        setValue("verificationFeedback", task.verificationFeedback);
+      } else if (!task.verificationFeedback) {
+         setValue("verificationFeedback", "");
+      }
+    } else {
+        setValue("verificationFeedback", ""); // Clear if no task
     }
-  }, [task, setValue]);
+  }, [task, setValue, watch]); // watch added to dependency
 
   const handleVerifySubmit: SubmitHandler<VerifyTaskFormValues> = async (data) => {
     setIsSubmittingVerify(true);
     await onVerify(data.verificationFeedback || "");
     setIsSubmittingVerify(false);
-    reset();
+    reset({ verificationFeedback: "" });
     onClose();
   };
 
   const handleRejectSubmit: SubmitHandler<VerifyTaskFormValues> = async (data) => {
     setIsSubmittingReject(true);
-    await onReject(data.verificationFeedback || "Please review and try again."); // Default rejection message
+    // Ensure some feedback is provided if rejecting, even if it's a default one.
+    await onReject(data.verificationFeedback || "Please review and try again.");
     setIsSubmittingReject(false);
-    reset();
+    reset({ verificationFeedback: "" });
     onClose();
   };
   
   const handleCloseDialog = () => {
     if (!isSubmittingVerify && !isSubmittingReject) {
-      reset();
+      reset({ verificationFeedback: "" }); // Reset form on cancel
       onClose();
     }
   };
@@ -74,11 +85,11 @@ export default function VerifyTaskModal({ isOpen, onClose, onVerify, onReject, t
         <DialogHeader>
           <DialogTitle>Verify Task: {task.description}</DialogTitle>
           <DialogDescription>
-            Review the task details and child's notes. Provide feedback and either verify or return the task.
+            Review the task details, child's notes, and submitted image (if any).
           </DialogDescription>
         </DialogHeader>
         
-        <div className="py-4 space-y-4">
+        <div className="py-4 space-y-4 max-h-[70vh] overflow-y-auto pr-2">
           <div>
             <Label className="font-semibold">Task Details</Label>
             <p className="text-sm text-muted-foreground">{task.description} ({task.points} pts)</p>
@@ -90,8 +101,29 @@ export default function VerifyTaskModal({ isOpen, onClose, onVerify, onReject, t
               <p className="text-sm p-2 bg-secondary/30 rounded-md whitespace-pre-wrap">{task.completionNotes}</p>
             </div>
           )}
+
+          {task.completionImageURL && (
+            <div>
+              <Label className="font-semibold">Submitted Image</Label>
+              <div className="mt-1 relative w-full aspect-video rounded-md overflow-hidden border">
+                 <a href={task.completionImageURL} target="_blank" rel="noopener noreferrer" className="block w-full h-full">
+                    <Image 
+                        src={task.completionImageURL} 
+                        alt="Child's submitted work" 
+                        layout="fill"
+                        objectFit="contain" 
+                        className="bg-muted"
+                        data-ai-hint="task submission"
+                    />
+                 </a>
+              </div>
+               <a href={task.completionImageURL} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-1 inline-flex items-center">
+                 <ImageIcon className="h-3 w-3 mr-1"/> Open image in new tab
+               </a>
+            </div>
+          )}
           <Separator />
-          <form id="verifyTaskForm" className="space-y-3"> {/* Give form an ID to be targeted by footer buttons */}
+          <form id="verifyTaskForm" className="space-y-3">
             <div>
                 <Label htmlFor="verificationFeedback">Your Feedback/Encouragement (Optional)</Label>
                 <Textarea 
@@ -106,7 +138,7 @@ export default function VerifyTaskModal({ isOpen, onClose, onVerify, onReject, t
           </form>
         </div>
 
-        <DialogFooter className="mt-2 sm:justify-between">
+        <DialogFooter className="mt-2 sm:justify-between border-t pt-4">
           <Button 
             type="button" 
             variant="outline" 

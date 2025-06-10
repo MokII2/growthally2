@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianMask, Activity, Palette, Brain, CookingPot, BookOpen, PersonStanding, Music, Gamepad2, Code2, CheckSquare, BellRing, MessageSquare, RotateCcw } from "lucide-react";
+import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianMask, Activity, Palette, Brain, CookingPot, BookOpen, PersonStanding, Music, Gamepad2, Code2, CheckSquare, BellRing, MessageSquare, RotateCcw, Image as ImageIcon } from "lucide-react";
 import AddChildModal from "@/components/modals/AddChildModal";
 import AddTaskModal from "@/components/modals/AddTaskModal";
 import AddRewardModal from "@/components/modals/AddRewardModal";
@@ -26,6 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
+import NextImage from "next/image"; // Renamed to avoid conflict with Lucide icon
 
 const hobbyIcons: Record<string, React.ElementType> = {
   "运动": Activity,
@@ -117,14 +118,35 @@ export default function ParentDashboardPage() {
     setIsDeleting(true);
     try {
       if (itemToDelete.type === 'child') {
+        // Also delete tasks assigned ONLY to this child if they are pending or completed (not verified yet)
+        const tasksToDeleteQuery = query(
+          collection(db, "tasks"), 
+          where("parentId", "==", user.uid),
+          where("assignedToUids", "array-contains", itemToDelete.childAuthUid)
+        );
+        const tasksSnapshot = await getDocs(tasksToDeleteQuery);
+        const batch = writeBatch(db);
+        tasksSnapshot.forEach(taskDoc => {
+          const taskData = taskDoc.data() as Task;
+          if (taskData.assignedToUids.length === 1 && (taskData.status === 'pending' || taskData.status === 'completed')) {
+            batch.delete(taskDoc.ref);
+          } else if (taskData.assignedToUids.length > 1) {
+            // If assigned to multiple, remove this child from the list
+            const updatedUids = taskData.assignedToUids.filter(uid => uid !== itemToDelete.childAuthUid);
+            const updatedNames = taskData.assignedToNames.filter(name => name !== itemToDelete.name); // Assuming name matches
+            batch.update(taskDoc.ref, { assignedToUids: updatedUids, assignedToNames: updatedNames });
+          }
+        });
+        await batch.commit();
+
         await deleteDoc(doc(db, "users", user.uid, "children", itemToDelete.id));
         if (itemToDelete.childAuthUid) {
           const childProfileRef = doc(db, "users", itemToDelete.childAuthUid);
           const childProfileSnap = await getDoc(childProfileRef);
           if (childProfileSnap.exists()) await deleteDoc(childProfileRef);
-          toast({ title: "Manual Action May Be Required", description: `If ${itemToDelete.name} had direct login, their Firebase Auth account needs to be deleted manually.`, variant: "default", duration: 10000 });
         }
-        toast({ title: "Child Record Deleted", description: `${itemToDelete.name}'s record has been removed.` });
+        toast({ title: "Child Record Deleted", description: `${itemToDelete.name}'s record and their pending/unverified tasks have been removed.` });
+        toast({ title: "Manual Action May Be Required", description: `If ${itemToDelete.name} had direct login, their Firebase Auth account needs to be deleted manually via Firebase Console.`, variant: "default", duration: 10000 });
       } else if (itemToDelete.type === 'task') {
         await deleteDoc(doc(db, "tasks", itemToDelete.id));
         toast({ title: "Task Deleted", description: `Task "${itemToDelete.name}" has been removed.` });
@@ -187,7 +209,11 @@ export default function ParentDashboardPage() {
     const task = selectedTaskForVerification;
     try {
       const taskRef = doc(db, "tasks", task.id);
-      await updateDoc(taskRef, { status: "pending", verificationFeedback: feedback });
+      await updateDoc(taskRef, { 
+        status: "pending", 
+        verificationFeedback: feedback,
+        // completionImageURL: deleteField() // Optionally clear image if returned
+      });
       toast({ title: "Task Returned", description: `"${task.description}" has been returned to the child for revision.` });
     } catch (error: any) {
       console.error("Error returning task:", error);
@@ -209,7 +235,7 @@ export default function ParentDashboardPage() {
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the {itemToDelete?.type} named "{itemToDelete?.name}".
-              {itemToDelete?.type === 'child' && " Deleting a child will remove their app data. Their Firebase Authentication account (if direct login was enabled) will need to be manually deleted from the Firebase console."}
+              {itemToDelete?.type === 'child' && " Deleting a child will also remove their pending/unverified tasks. Their Firebase Authentication account (if direct login was enabled) will need to be manually deleted from the Firebase console."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -252,11 +278,19 @@ export default function ParentDashboardPage() {
                             Child's notes: "{task.completionNotes}"
                         </p>
                        )}
+                       {task.completionImageURL && (
+                        <div className="mt-1.5">
+                            <a href={task.completionImageURL} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center">
+                                <ImageIcon className="h-3 w-3 mr-1"/> View Submitted Image
+                            </a>
+                        </div>
+                       )}
                        <p className="text-sm text-primary mt-1">{task.points} pts</p>
                     </div>
                     <Button 
                       size="sm" 
                       onClick={() => handleOpenVerifyModal(task)}
+                      className="self-start sm:self-center"
                     >
                       Review Task
                       <MessageSquare className="ml-2 h-4 w-4" />
@@ -411,30 +445,39 @@ export default function ParentDashboardPage() {
                     <ul className="space-y-2 opacity-70">
                       {verifiedTasks.map(task => (
                         <li key={task.id} className="p-2 rounded-md bg-green-100 dark:bg-green-900/30">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <span className="font-medium line-through">{task.description}</span>
-                              {task.assignedToNames && task.assignedToNames.length > 0 && (
-                                  <p className="text-xs text-green-700 dark:text-green-300">
-                                      Completed by: {task.assignedToNames.join(', ')}
-                                  </p>
-                              )}
-                              {task.verificationFeedback && (
-                                <p className="text-xs italic text-green-700 dark:text-green-300 mt-0.5">Your feedback: "{task.verificationFeedback}"</p>
-                              )}
+                          <div className="flex flex-col items-start">
+                            <div className="flex items-start justify-between w-full">
+                                <div className="flex-1">
+                                <span className="font-medium line-through">{task.description}</span>
+                                {task.assignedToNames && task.assignedToNames.length > 0 && (
+                                    <p className="text-xs text-green-700 dark:text-green-300">
+                                        Completed by: {task.assignedToNames.join(', ')}
+                                    </p>
+                                )}
+                                {task.verificationFeedback && (
+                                    <p className="text-xs italic text-green-700 dark:text-green-300 mt-0.5">Your feedback: "{task.verificationFeedback}"</p>
+                                )}
+                                </div>
+                                <div className="flex flex-col items-end ml-2 self-start">
+                                    <span className="text-xs text-green-600 dark:text-green-400">Points Awarded!</span>
+                                    <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-7 w-7 mt-1 text-muted-foreground hover:text-destructive"
+                                    onClick={() => handleDeleteConfirmation(task.id, task.description, 'task')}
+                                    title={`Delete task "${task.description}"`}
+                                    >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                                </div>
                             </div>
-                            <div className="flex flex-col items-end ml-2">
-                                <span className="text-xs text-green-600 dark:text-green-400">Points Awarded!</span>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-7 w-7 mt-1 text-muted-foreground hover:text-destructive"
-                                  onClick={() => handleDeleteConfirmation(task.id, task.description, 'task')}
-                                  title={`Delete task "${task.description}"`}
-                                  >
-                                  <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
+                            {task.completionImageURL && (
+                                <div className="mt-1">
+                                   <a href={task.completionImageURL} target="_blank" rel="noopener noreferrer" className="text-xs text-green-700 dark:text-green-400 hover:underline flex items-center opacity-70">
+                                    <ImageIcon className="h-3 w-3 mr-1"/> View Submitted Image
+                                   </a>
+                                </div>
+                              )}
                           </div>
                         </li>
                       ))}
@@ -521,5 +564,3 @@ export default function ParentDashboardPage() {
     </div>
   );
 }
-
-    

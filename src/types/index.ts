@@ -3,7 +3,7 @@ import type { User as FirebaseUser } from 'firebase/auth';
 
 export interface UserProfile {
   uid: string;
-  role: 'parent' | 'child';
+  role: 'parent' | 'child' | 'administrator'; // Added 'administrator'
   email?: string;
   displayName?: string;
   name?: string;
@@ -59,12 +59,23 @@ export interface ClaimedReward {
   childUid: string; // UID of the child who claimed it
 }
 
+// New Announcement Type
+export interface Announcement {
+  id?: string; // Document ID will be 'current'
+  title: string;
+  content: string;
+  isActive: boolean;
+  updatedAt?: any; // Firebase Server Timestamp
+  updatedBy?: string; // UID of admin
+}
+
 export interface AuthContextType {
   user: FirebaseUser | null;
   userProfile: UserProfile | null;
   loading: boolean;
   isParent: boolean;
   isChild: boolean;
+  isAdministrator: boolean; // Added for admin role check
   signUpParent: (details: Omit<UserProfile, 'uid' | 'role' | 'points' | 'parentId' | 'hobbies' | 'gender'> & { password: string; gender: 'male' | 'female' | 'unspecified' | undefined }) => Promise<FirebaseUser | null>;
   signInParentWithEmail: (email: string, password: string) => Promise<FirebaseUser | null>;
   signInChildWithEmail: (email: string, password: string) => Promise<FirebaseUser | null>;

@@ -57,7 +57,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (firebaseUser) {
         setUser(firebaseUser);
         const fetchedProfileData = await fetchUserProfile(firebaseUser.uid);
-        setUserProfile(fetchedProfileData); 
+        setUserProfile(fetchedProfileData);
       } else {
         setUser(null);
         setUserProfile(null);
@@ -131,10 +131,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
         return childUser;
       } else {
-        await signOut(auth); 
+        await signOut(auth);
         setLoading(false);
         console.error("Attempted login for non-child account or profile missing.");
-        return null; 
+        return null;
       }
     } catch (error: any) {
       console.error("Error signing in child:", error.message, error.code);
@@ -181,9 +181,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
       await setDoc(doc(db, 'users', newChildUser.uid), childProfileForUsersCollection);
 
-      // Use child's UID as the document ID in the subcollection
-      const childSubDocRef = doc(db, 'users', parentAuthUid, 'children', newChildUser.uid); 
-      const childSubcollectionDocData: Omit<Child, 'id'> = { // 'id' is now the doc ID, not a field in data
+      const childSubDocRef = doc(db, 'users', parentAuthUid, 'children', newChildUser.uid);
+      const childSubcollectionDocData: Omit<Child, 'id'> = {
         name: childDetails.name,
         email: fullEmail,
         points: 0,
@@ -223,13 +222,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         router.push('/parent/login');
       } else if (currentRole === 'child') {
         router.push('/login');
+      } else if (currentRole === 'administrator') {
+        router.push('/'); // Or specific admin logout destination
       } else {
         router.push('/');
       }
     } catch (error) {
       console.error("Error signing out:", error);
     } finally {
-        setLoading(false); 
+        setLoading(false);
     }
   };
 
@@ -246,12 +247,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const value = {
+  const value: AuthContextType = { // Explicitly type 'value'
     user,
     userProfile,
     loading,
     isParent: userProfile?.role === 'parent',
     isChild: userProfile?.role === 'child',
+    isAdministrator: userProfile?.role === 'administrator', // Added
     signUpParent,
     signInParentWithEmail,
     signInChildWithEmail,

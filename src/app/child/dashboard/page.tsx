@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, Star, Trophy, Clock, RotateCcw, Gift } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Task, Reward, ClaimedReward } from "@/types";
-import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, writeBatch, increment, serverTimestamp, orderBy } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, writeBatch, increment, addDoc, serverTimestamp, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import CompleteTaskModal from "@/components/modals/CompleteTaskModal";
@@ -39,8 +39,7 @@ export default function ChildDashboardPage() {
     const tasksQuery = query(
       collection(db, "tasks"),
       where("parentId", "==", userProfile.parentId),
-      where("assignedToUids", "array-contains", user.uid),
-      orderBy("createdAt", "desc")
+      where("assignedToUids", "array-contains", user.uid)
     );
     const unsubscribeTasks = onSnapshot(tasksQuery, (snapshot) => {
       const fetchedTasks: Task[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
@@ -71,7 +70,7 @@ export default function ChildDashboardPage() {
 
     // Fetch Claimed Reward History
     const claimedRewardsQuery = query(
-        collection(db, "users", user.uid, "claimedRewards"),
+        collection(db, "users", user.uid, "claimedRewards"), 
         orderBy("claimedAt", "desc")
     );
     const unsubscribeClaimedRewards = onSnapshot(claimedRewardsQuery, (snapshot) => {
@@ -100,7 +99,7 @@ export default function ChildDashboardPage() {
       toast({ title: "Error", description: "Cannot submit task. Please try again.", variant: "destructive"});
       return;
     }
-
+    
     const taskRef = doc(db, "tasks", selectedTaskForCompletion.id);
     try {
       const taskSnap = await getDoc(taskRef);
@@ -115,9 +114,9 @@ export default function ChildDashboardPage() {
         return;
       }
 
-      await updateDoc(taskRef, {
+      await updateDoc(taskRef, { 
         status: "completed",
-        completionNotes: completionNotes
+        completionNotes: completionNotes 
       });
 
       toast({ title: "Task Submitted!", description: `"${taskData.description}" has been submitted for parent verification.` });
@@ -127,7 +126,7 @@ export default function ChildDashboardPage() {
       toast({ title: "Error", description: "Could not submit task.", variant: "destructive" });
     }
   };
-
+  
   const handleClaimReward = async (reward: Reward) => {
     if (!user || !userProfile) {
       toast({ title: "Authentication Error", description: "Please log in again." });
@@ -140,11 +139,13 @@ export default function ChildDashboardPage() {
 
     const batch = writeBatch(db);
     try {
+      // 1. Deduct points from child's main profile
       const userProfileRef = doc(db, "users", user.uid);
       batch.update(userProfileRef, {
         points: increment(-reward.pointsCost)
       });
 
+      // 2. Deduct points from parent's subcollection record for the child
       if (userProfile.parentId) {
         const childSubDocRef = doc(db, "users", userProfile.parentId, "children", user.uid);
         batch.update(childSubDocRef, {
@@ -152,7 +153,8 @@ export default function ChildDashboardPage() {
         });
       }
 
-      const claimedRewardRef = doc(collection(db, "users", user.uid, "claimedRewards"));
+      // 3. Add a record to the child's claimedRewards subcollection
+      const claimedRewardRef = doc(collection(db, "users", user.uid, "claimedRewards")); // Auto-generates ID
       const claimedRewardData: Omit<ClaimedReward, 'id'> = {
         originalRewardId: reward.id,
         rewardDescription: reward.description,
@@ -162,7 +164,7 @@ export default function ChildDashboardPage() {
         childUid: user.uid,
       };
       batch.set(claimedRewardRef, claimedRewardData);
-
+      
       await batch.commit();
       toast({ title: "Reward Claimed!", description: `You've claimed "${reward.description}".` });
     } catch (error) {
@@ -203,7 +205,7 @@ export default function ChildDashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="max-h-[400px] pr-3">
+            <ScrollArea className="max-h-[400px] pr-3"> {/* Added ScrollArea for tasks list */}
               {pendingTasks.length > 0 ? (
                 <ul className="space-y-3">
                   {pendingTasks.map(task => (
@@ -231,7 +233,7 @@ export default function ChildDashboardPage() {
               ) : (
                 <p className="text-sm text-muted-foreground">No pending tasks. Great job!</p>
               )}
-
+              
               {completedTasksAwaitingVerification.length > 0 && (
                     <div className="mt-4">
                       <h3 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center">
@@ -240,14 +242,12 @@ export default function ChildDashboardPage() {
                       </h3>
                         <ul className="space-y-2 opacity-70">
                           {completedTasksAwaitingVerification.map(task => (
-                            <li key={task.id} className="flex flex-col items-start p-2 rounded-md bg-yellow-100 dark:bg-yellow-900/30">
-                              <div className="flex items-center justify-between w-full">
-                                <div className="flex-1">
-                                    <p className="font-medium line-through">{task.description}</p>
-                                    {task.completionNotes && <p className="text-xs italic text-yellow-700 dark:text-yellow-300 mt-0.5">Your notes: "{task.completionNotes}"</p>}
-                                </div>
-                                <span className="text-xs text-yellow-600 dark:text-yellow-400 ml-2 self-start">Awaiting Verification</span>
+                            <li key={task.id} className="flex items-center justify-between p-2 rounded-md bg-yellow-100 dark:bg-yellow-900/30">
+                              <div className="flex-1">
+                                  <p className="font-medium line-through">{task.description}</p>
+                                  {task.completionNotes && <p className="text-xs italic text-yellow-700 dark:text-yellow-300 mt-0.5">Your notes: "{task.completionNotes}"</p>}
                               </div>
+                              <span className="text-xs text-yellow-600 dark:text-yellow-400 ml-2">Awaiting Verification</span>
                             </li>
                           ))}
                         </ul>
@@ -259,14 +259,12 @@ export default function ChildDashboardPage() {
                       <h3 className="text-sm font-semibold text-muted-foreground mb-2">Verified & Awarded Tasks:</h3>
                         <ul className="space-y-2 opacity-50">
                           {verifiedTasks.map(task => (
-                            <li key={task.id} className="flex flex-col items-start p-2 rounded-md bg-green-100 dark:bg-green-900/30">
-                                <div className="flex items-center justify-between w-full">
-                                    <div className="flex-1">
-                                        <p className="font-medium line-through">{task.description}</p>
-                                        {task.verificationFeedback && <p className="text-xs italic text-green-700 dark:text-green-300 mt-0.5">Parent: "{task.verificationFeedback}"</p>}
-                                    </div>
-                                    <span className="text-xs text-green-600 dark:text-green-400 ml-2 self-start">Points Awarded!</span>
-                                </div>
+                            <li key={task.id} className="flex items-center justify-between p-2 rounded-md bg-green-100 dark:bg-green-900/30">
+                              <div className="flex-1">
+                                  <p className="font-medium line-through">{task.description}</p>
+                                  {task.verificationFeedback && <p className="text-xs italic text-green-700 dark:text-green-300 mt-0.5">Parent: "{task.verificationFeedback}"</p>}
+                              </div>
+                              <span className="text-xs text-green-600 dark:text-green-400 ml-2">Points Awarded!</span>
                             </li>
                           ))}
                         </ul>
@@ -309,6 +307,7 @@ export default function ChildDashboardPage() {
         </Card>
       </div>
 
+      {/* Claimed Rewards History Card */}
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-xl font-medium">

@@ -4,13 +4,13 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianMask, Activity, Palette, Brain, CookingPot, BookOpen, PersonStanding, Music, Gamepad2, Code2, CheckSquare, BellRing, MessageSquare, RotateCcw, Image as ImageIcon } from "lucide-react";
+import { PlusCircle, Users, ListChecks, Award, KeyRound, Copy, Trash2, VenetianMask, Activity, Palette, Brain, CookingPot, BookOpen, PersonStanding, Music, Gamepad2, Code2, CheckSquare, BellRing, MessageSquare, RotateCcw } from "lucide-react";
 import AddChildModal from "@/components/modals/AddChildModal";
 import AddTaskModal from "@/components/modals/AddTaskModal";
 import AddRewardModal from "@/components/modals/AddRewardModal";
 import VerifyTaskModal from "@/components/modals/VerifyTaskModal";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, getDoc, writeBatch, updateDoc, increment } from "firebase/firestore";
+import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, getDoc, writeBatch, updateDoc, increment, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Child, Task, Reward } from "@/types";
 import { useToast } from "@/hooks/use-toast";
@@ -26,7 +26,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
-import NextImage from "next/image"; // Renamed to avoid conflict with Lucide icon
 
 const hobbyIcons: Record<string, React.ElementType> = {
   "运动": Activity,
@@ -34,12 +33,12 @@ const hobbyIcons: Record<string, React.ElementType> = {
   "音乐": Music,
   "舞蹈": PersonStanding,
   "计算": Brain,
-  "手工": VenetianMask, 
+  "手工": VenetianMask,
   "烘培": CookingPot,
-  "书法": BookOpen, 
+  "书法": BookOpen,
   "绘画": Palette,
   "编程": Code2,
-  "游戏": Gamepad2, 
+  "游戏": Gamepad2,
 };
 
 export default function ParentDashboardPage() {
@@ -59,7 +58,7 @@ export default function ParentDashboardPage() {
 
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; type: 'child' | 'task' | 'reward'; childAuthUid?: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  
+
   useEffect(() => {
     if (!user) return;
     const childrenQuery = query(collection(db, "users", user.uid, "children"), orderBy("name", "asc"));
@@ -118,9 +117,8 @@ export default function ParentDashboardPage() {
     setIsDeleting(true);
     try {
       if (itemToDelete.type === 'child') {
-        // Also delete tasks assigned ONLY to this child if they are pending or completed (not verified yet)
         const tasksToDeleteQuery = query(
-          collection(db, "tasks"), 
+          collection(db, "tasks"),
           where("parentId", "==", user.uid),
           where("assignedToUids", "array-contains", itemToDelete.childAuthUid)
         );
@@ -131,9 +129,8 @@ export default function ParentDashboardPage() {
           if (taskData.assignedToUids.length === 1 && (taskData.status === 'pending' || taskData.status === 'completed')) {
             batch.delete(taskDoc.ref);
           } else if (taskData.assignedToUids.length > 1) {
-            // If assigned to multiple, remove this child from the list
             const updatedUids = taskData.assignedToUids.filter(uid => uid !== itemToDelete.childAuthUid);
-            const updatedNames = taskData.assignedToNames.filter(name => name !== itemToDelete.name); // Assuming name matches
+            const updatedNames = taskData.assignedToNames.filter(name => name !== itemToDelete.name);
             batch.update(taskDoc.ref, { assignedToUids: updatedUids, assignedToNames: updatedNames });
           }
         });
@@ -154,7 +151,7 @@ export default function ParentDashboardPage() {
         await deleteDoc(doc(db, "rewards", itemToDelete.id));
         toast({ title: "Reward Deleted", description: `Reward "${itemToDelete.name}" has been removed.` });
       }
-      setItemToDelete(null); 
+      setItemToDelete(null);
     } catch (error: any) {
       console.error(`Error deleting ${itemToDelete.type}:`, error);
       toast({ title: `Error Deleting ${itemToDelete.type}`, description: error.message || "Could not complete deletion.", variant: "destructive" });
@@ -173,7 +170,7 @@ export default function ParentDashboardPage() {
       toast({ title: "Error", description: "Task details are missing.", variant: "destructive" });
       return;
     }
-    
+
     const task = selectedTaskForVerification;
     if (!task.assignedToUids || task.assignedToUids.length === 0) {
         toast({ title: "Error", description: "This task has no assigned children.", variant: "destructive" });
@@ -192,7 +189,7 @@ export default function ParentDashboardPage() {
         const childSubDocRef = doc(db, "users", user.uid, "children", childAuthUid);
         batch.update(childSubDocRef, { points: increment(task.points) });
       }
-      
+
       await batch.commit();
       toast({ title: "Task Verified!", description: `"${task.description}" has been verified and points awarded.` });
 
@@ -209,10 +206,9 @@ export default function ParentDashboardPage() {
     const task = selectedTaskForVerification;
     try {
       const taskRef = doc(db, "tasks", task.id);
-      await updateDoc(taskRef, { 
-        status: "pending", 
+      await updateDoc(taskRef, {
+        status: "pending",
         verificationFeedback: feedback,
-        // completionImageURL: deleteField() // Optionally clear image if returned
       });
       toast({ title: "Task Returned", description: `"${task.description}" has been returned to the child for revision.` });
     } catch (error: any) {
@@ -278,17 +274,10 @@ export default function ParentDashboardPage() {
                             Child's notes: "{task.completionNotes}"
                         </p>
                        )}
-                       {task.completionImageURL && (
-                        <div className="mt-1.5">
-                            <a href={task.completionImageURL} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center">
-                                <ImageIcon className="h-3 w-3 mr-1"/> View Submitted Image
-                            </a>
-                        </div>
-                       )}
                        <p className="text-sm text-primary mt-1">{task.points} pts</p>
                     </div>
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       onClick={() => handleOpenVerifyModal(task)}
                       className="self-start sm:self-center"
                     >
@@ -329,7 +318,7 @@ export default function ParentDashboardPage() {
                         {child.hobbies && child.hobbies.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
                             {child.hobbies.map(hobby => {
-                              const IconComponent = hobbyIcons[hobby] || Palette; 
+                              const IconComponent = hobbyIcons[hobby] || Palette;
                               return (
                                 <Badge variant="outline" key={hobby} className="text-xs py-0.5 px-1.5 bg-background/50">
                                   <IconComponent className="h-3 w-3 mr-1 opacity-70" />
@@ -342,9 +331,9 @@ export default function ParentDashboardPage() {
                       </div>
                        <div className="flex flex-col items-end gap-1">
                         <Badge variant="outline">{child.points ?? 0} pts</Badge>
-                        <Button 
-                            variant="ghost" 
-                            size="icon" 
+                        <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-7 w-7 text-muted-foreground hover:text-destructive"
                             onClick={() => handleDeleteConfirmation(child.id, child.name, 'child', child.authUid)}
                             title={`Delete ${child.name}`}
@@ -362,9 +351,9 @@ export default function ParentDashboardPage() {
                             </p>
                             <p className="text-sm font-mono tracking-wider text-foreground">{child.initialPassword}</p>
                            </div>
-                           <Button 
-                             variant="ghost" 
-                             size="icon" 
+                           <Button
+                             variant="ghost"
+                             size="icon"
                              className="h-7 w-7"
                              onClick={() => copyToClipboard(child.initialPassword!, `${child.name}'s initial password`)}
                              title="Copy password"
@@ -421,9 +410,9 @@ export default function ParentDashboardPage() {
                             </div>
                             <div className="flex flex-col items-end ml-2">
                               <span className="text-sm text-primary whitespace-nowrap">{task.points} pts</span>
-                              <Button 
-                                  variant="ghost" 
-                                  size="icon" 
+                              <Button
+                                  variant="ghost"
+                                  size="icon"
                                   className="h-7 w-7 mt-1 text-muted-foreground hover:text-destructive"
                                   onClick={() => handleDeleteConfirmation(task.id, task.description, 'task')}
                                   title={`Delete task "${task.description}"`}
@@ -460,9 +449,9 @@ export default function ParentDashboardPage() {
                                 </div>
                                 <div className="flex flex-col items-end ml-2 self-start">
                                     <span className="text-xs text-green-600 dark:text-green-400">Points Awarded!</span>
-                                    <Button 
-                                    variant="ghost" 
-                                    size="icon" 
+                                    <Button
+                                    variant="ghost"
+                                    size="icon"
                                     className="h-7 w-7 mt-1 text-muted-foreground hover:text-destructive"
                                     onClick={() => handleDeleteConfirmation(task.id, task.description, 'task')}
                                     title={`Delete task "${task.description}"`}
@@ -471,20 +460,13 @@ export default function ParentDashboardPage() {
                                 </Button>
                                 </div>
                             </div>
-                            {task.completionImageURL && (
-                                <div className="mt-1">
-                                   <a href={task.completionImageURL} target="_blank" rel="noopener noreferrer" className="text-xs text-green-700 dark:text-green-400 hover:underline flex items-center opacity-70">
-                                    <ImageIcon className="h-3 w-3 mr-1"/> View Submitted Image
-                                   </a>
-                                </div>
-                              )}
                           </div>
                         </li>
                       ))}
                     </ul>
                   </div>
                 )}
-                
+
                 {pendingTasks.length === 0 && verifiedTasks.length === 0 && tasksAwaitingVerification.length === 0 && (
                      <p className="text-sm text-muted-foreground">All tasks are either awaiting verification or none have been created.</p>
                 )}
@@ -513,9 +495,9 @@ export default function ParentDashboardPage() {
                     </div>
                     <div className="flex items-center gap-2 ml-2">
                         <span className="text-sm text-primary whitespace-nowrap">{reward.pointsCost} pts</span>
-                        <Button 
-                            variant="ghost" 
-                            size="icon" 
+                        <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-7 w-7 text-muted-foreground hover:text-destructive"
                             onClick={() => handleDeleteConfirmation(reward.id, reward.description, 'reward')}
                             title={`Delete reward "${reward.description}"`}
@@ -533,20 +515,20 @@ export default function ParentDashboardPage() {
         </Card>
       </div>
 
-      <AddChildModal 
-        isOpen={isAddChildModalOpen} 
+      <AddChildModal
+        isOpen={isAddChildModalOpen}
         onClose={() => setIsAddChildModalOpen(false)}
-        onChildAdded={handleDataRefreshNeeded} 
+        onChildAdded={handleDataRefreshNeeded}
       />
-      <AddTaskModal 
-        isOpen={isAddTaskModalOpen} 
-        onClose={() => setIsAddTaskModalOpen(false)} 
+      <AddTaskModal
+        isOpen={isAddTaskModalOpen}
+        onClose={() => setIsAddTaskModalOpen(false)}
         onTaskAdded={handleDataRefreshNeeded}
-        parentChildren={children} 
+        parentChildren={children}
       />
-      <AddRewardModal 
-        isOpen={isAddRewardModalOpen} 
-        onClose={() => setIsAddRewardModalOpen(false)} 
+      <AddRewardModal
+        isOpen={isAddRewardModalOpen}
+        onClose={() => setIsAddRewardModalOpen(false)}
         onRewardAdded={handleDataRefreshNeeded}
       />
       {selectedTaskForVerification && (

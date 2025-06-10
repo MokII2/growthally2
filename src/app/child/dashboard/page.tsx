@@ -4,16 +4,15 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Star, Trophy, Clock, RotateCcw, Gift, Image as ImageIcon } from "lucide-react";
+import { CheckCircle2, Star, Trophy, Clock, RotateCcw, Gift } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Task, Reward, ClaimedReward } from "@/types";
-import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, writeBatch, increment, addDoc, serverTimestamp, orderBy } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, writeBatch, increment, serverTimestamp, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import CompleteTaskModal from "@/components/modals/CompleteTaskModal";
 import { format } from 'date-fns';
 import { ScrollArea } from "@/components/ui/scroll-area";
-import Image from "next/image"; // For displaying image previews
 
 export default function ChildDashboardPage() {
   const { user, userProfile } = useAuth();
@@ -72,7 +71,7 @@ export default function ChildDashboardPage() {
 
     // Fetch Claimed Reward History
     const claimedRewardsQuery = query(
-        collection(db, "users", user.uid, "claimedRewards"), 
+        collection(db, "users", user.uid, "claimedRewards"),
         orderBy("claimedAt", "desc")
     );
     const unsubscribeClaimedRewards = onSnapshot(claimedRewardsQuery, (snapshot) => {
@@ -96,12 +95,12 @@ export default function ChildDashboardPage() {
     setIsCompleteTaskModalOpen(true);
   };
 
-  const handleCompleteTaskSubmit = async (completionNotes: string, imageURL?: string) => {
+  const handleCompleteTaskSubmit = async (completionNotes: string) => {
     if (!user || !userProfile || !selectedTaskForCompletion) {
       toast({ title: "Error", description: "Cannot submit task. Please try again.", variant: "destructive"});
       return;
     }
-    
+
     const taskRef = doc(db, "tasks", selectedTaskForCompletion.id);
     try {
       const taskSnap = await getDoc(taskRef);
@@ -116,15 +115,10 @@ export default function ChildDashboardPage() {
         return;
       }
 
-      const updateData: Partial<Task> = { 
+      await updateDoc(taskRef, {
         status: "completed",
-        completionNotes: completionNotes 
-      };
-      if (imageURL) {
-        updateData.completionImageURL = imageURL;
-      }
-
-      await updateDoc(taskRef, updateData);
+        completionNotes: completionNotes
+      });
 
       toast({ title: "Task Submitted!", description: `"${taskData.description}" has been submitted for parent verification.` });
       setSelectedTaskForCompletion(null);
@@ -133,7 +127,7 @@ export default function ChildDashboardPage() {
       toast({ title: "Error", description: "Could not submit task.", variant: "destructive" });
     }
   };
-  
+
   const handleClaimReward = async (reward: Reward) => {
     if (!user || !userProfile) {
       toast({ title: "Authentication Error", description: "Please log in again." });
@@ -158,7 +152,7 @@ export default function ChildDashboardPage() {
         });
       }
 
-      const claimedRewardRef = doc(collection(db, "users", user.uid, "claimedRewards")); 
+      const claimedRewardRef = doc(collection(db, "users", user.uid, "claimedRewards"));
       const claimedRewardData: Omit<ClaimedReward, 'id'> = {
         originalRewardId: reward.id,
         rewardDescription: reward.description,
@@ -168,7 +162,7 @@ export default function ChildDashboardPage() {
         childUid: user.uid,
       };
       batch.set(claimedRewardRef, claimedRewardData);
-      
+
       await batch.commit();
       toast({ title: "Reward Claimed!", description: `You've claimed "${reward.description}".` });
     } catch (error) {
@@ -237,7 +231,7 @@ export default function ChildDashboardPage() {
               ) : (
                 <p className="text-sm text-muted-foreground">No pending tasks. Great job!</p>
               )}
-              
+
               {completedTasksAwaitingVerification.length > 0 && (
                     <div className="mt-4">
                       <h3 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center">
@@ -254,13 +248,6 @@ export default function ChildDashboardPage() {
                                 </div>
                                 <span className="text-xs text-yellow-600 dark:text-yellow-400 ml-2 self-start">Awaiting Verification</span>
                               </div>
-                              {task.completionImageURL && (
-                                <div className="mt-2">
-                                   <a href={task.completionImageURL} target="_blank" rel="noopener noreferrer" className="text-xs text-yellow-700 dark:text-yellow-400 hover:underline flex items-center">
-                                    <ImageIcon className="h-3 w-3 mr-1"/> View Submitted Image
-                                   </a>
-                                </div>
-                              )}
                             </li>
                           ))}
                         </ul>
@@ -280,13 +267,6 @@ export default function ChildDashboardPage() {
                                     </div>
                                     <span className="text-xs text-green-600 dark:text-green-400 ml-2 self-start">Points Awarded!</span>
                                 </div>
-                                {task.completionImageURL && (
-                                <div className="mt-1">
-                                   <a href={task.completionImageURL} target="_blank" rel="noopener noreferrer" className="text-xs text-green-700 dark:text-green-400 hover:underline flex items-center opacity-70">
-                                    <ImageIcon className="h-3 w-3 mr-1"/> View Submitted Image
-                                   </a>
-                                </div>
-                              )}
                             </li>
                           ))}
                         </ul>
@@ -371,7 +351,6 @@ export default function ChildDashboardPage() {
           }}
           onSubmit={handleCompleteTaskSubmit}
           taskDescription={selectedTaskForCompletion.description}
-          taskId={selectedTaskForCompletion.id}
         />
       )}
     </div>

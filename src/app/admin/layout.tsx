@@ -31,7 +31,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <Header title={userProfile?.name ? `${userProfile.name}'s Admin Panel` : "Admin Panel"} />
-      <main className="flex-1 container py-8">
+      <main className="flex-1 container mx-auto px-6 py-8">
         {children}
       </main>
     </div>
